@@ -218,6 +218,7 @@ export const createJumpButton = async (): Promise<void> => {
   await observer.observe(body, { childList: true, subtree: true })
 
   let listeners: StoredListener[] = []
+  const buttonListeners: StoredListener[] = []
   let wasAtBottom = false
   let refreshInFlight = false
   let refreshQueued = false
@@ -259,6 +260,23 @@ export const createJumpButton = async (): Promise<void> => {
         .catch(() => undefined)
     }
     listeners = []
+  }
+
+  const unwireButton = async (): Promise<void> => {
+    for (const listener of buttonListeners) {
+      await listener.element
+        .removeEventListener(listener.type, listener.id)
+        .catch(() => undefined)
+    }
+    buttonListeners.length = 0
+  }
+
+  const addButtonListener = async (
+    type: string,
+    callback: (event: unknown) => void,
+  ): Promise<void> => {
+    const id = await button.addEventListener(type, callback)
+    buttonListeners.push({ element: button, type, id })
   }
 
   const wireScroll = async (targets: SafeElement[]): Promise<void> => {
@@ -363,6 +381,7 @@ export const createJumpButton = async (): Promise<void> => {
   let dragStartY = 0
   let moveStartX = 0
   let moveStartY = 0
+  let rafPending = false
 
   await button.addEventListener("pointerdown", (event) => {
     void (async () => {
@@ -396,7 +415,13 @@ export const createJumpButton = async (): Promise<void> => {
       const next = await clampToViewport(moveStartX + dx, moveStartY - dy)
       posX = next.x
       posY = next.y
-      await applyPosition()
+      if (!rafPending) {
+        rafPending = true
+        requestAnimationFrame(() => {
+          rafPending = false
+          void applyPosition()
+        })
+      }
     })()
   })
 
@@ -412,6 +437,16 @@ export const createJumpButton = async (): Promise<void> => {
           : POSITION_STORAGE_KEY
         await savePosition(key, { x: posX, y: posY })
       }
+    })()
+  })
+
+  await button.addEventListener("pointercancel", (event) => {
+    void (async () => {
+      if (!dragging) {
+        return
+      }
+      dragging = false
+      suppressClick = false
     })()
   })
 
@@ -445,6 +480,7 @@ export const createJumpButton = async (): Promise<void> => {
   })
 
   await risuai.onUnload(async () => {
+    await unwireButton()
     await unwireScroll()
     await button.remove().catch(() => undefined)
     await styleElement.remove().catch(() => undefined)
