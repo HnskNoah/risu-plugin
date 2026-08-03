@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.1.1
+// @version      1.3.1
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -24,9 +24,11 @@
     'a[href*="/preset/"]',
     'a[href*="/module/"]',
   ].join(',');
+  const DETAIL_PATH_RE = /^\/(character|preset|module)\//;
 
   const css = `
-    .rrw-card {
+    .rrw-card,
+    .rrw-detail-card {
       position: relative !important;
     }
 
@@ -65,6 +67,7 @@
     }
 
     .rrw-heart:focus-visible,
+    .rrw-detail-button:focus-visible,
     .rrw-toolbar button:focus-visible,
     .rrw-panel button:focus-visible,
     .rrw-panel a:focus-visible {
@@ -74,6 +77,42 @@
 
     .rrw-card.rrw-hidden {
       display: none !important;
+    }
+
+    .rrw-detail-button {
+      align-items: center;
+      appearance: none;
+      backdrop-filter: blur(8px);
+      background: rgba(17, 24, 39, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 19px;
+      font-weight: 700;
+      height: 36px;
+      justify-content: center;
+      line-height: 1;
+      padding: 0;
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      transition: transform 140ms ease, background 140ms ease, color 140ms ease, border-color 140ms ease;
+      user-select: none;
+      width: 36px;
+      z-index: 20;
+    }
+
+    .rrw-detail-button:hover {
+      transform: scale(1.08);
+    }
+
+    .rrw-detail-button[aria-pressed="true"] {
+      background: rgba(244, 63, 94, 0.95);
+      border-color: rgba(255, 255, 255, 0.65);
+      color: #fff;
     }
 
     .rrw-toolbar {
@@ -158,11 +197,55 @@
       justify-content: flex-end;
     }
 
+    .rrw-tabs {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-bottom: 10px;
+    }
+
+    .rrw-tab {
+      border-radius: 10px !important;
+      font-weight: 700 !important;
+      justify-content: center;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .rrw-tab[aria-pressed="true"] {
+      background: #f43f5e;
+      border-color: #fb7185;
+      color: #fff;
+    }
+
     .rrw-list {
       display: grid;
       gap: 8px;
       overflow: auto;
       padding-right: 3px;
+    }
+
+    .rrw-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .rrw-group + .rrw-group {
+      margin-top: 10px;
+    }
+
+    .rrw-group-title {
+      align-items: center;
+      color: rgba(255, 255, 255, 0.82);
+      display: flex;
+      font: 700 13px/1.3 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      justify-content: space-between;
+      padding: 2px 2px 0;
+    }
+
+    .rrw-group-items {
+      display: grid;
+      gap: 8px;
     }
 
     .rrw-empty {
@@ -237,6 +320,11 @@
         bottom: 12px;
         right: 12px;
       }
+
+      .rrw-detail-button {
+        right: 10px;
+        top: 10px;
+      }
     }
   `;
 
@@ -244,14 +332,17 @@
 
   let state = normalizeStore(readStore());
   let filterEnabled = false;
+  let panelFilter = 'character';
   let toolbar;
   let panel;
+  let detailButton;
   let observerScheduled = false;
 
   bootstrap();
 
   function bootstrap() {
     renderToolbar();
+    renderDetailButton();
     scanCards();
     observePage();
     patchHistory();
@@ -336,9 +427,26 @@
     return match ? match[1] : 'item';
   }
 
+  function currentDetailPath() {
+    const path = canonicalPath(location.href);
+    return DETAIL_PATH_RE.test(path) ? path : '';
+  }
+
+  function detectCurrentPageType(fallbackPath) {
+    const typeLabels = new Set(['character', 'preset', 'module', 'lorebook']);
+    const lines = (document.body.innerText || '')
+      .split('\n')
+      .map((line) => line.trim().toLowerCase())
+      .filter(Boolean);
+    const visibleType = lines.find((line) => typeLabels.has(line));
+
+    if (visibleType === 'lorebook') return 'module';
+    return visibleType || typeFromPath(fallbackPath);
+  }
+
   function isCard(anchor) {
     const path = canonicalPath(anchor.getAttribute('href') || anchor.href);
-    return /^\/(character|preset|module)\//.test(path);
+    return DETAIL_PATH_RE.test(path);
   }
 
   function extractMeta(card) {
@@ -360,9 +468,50 @@
       image,
       path,
       title,
-      type: typeFromPath(path),
+      type: detectCurrentPageType(path),
       url: new URL(path, location.origin).href,
     };
+  }
+
+  function extractCurrentPageMeta() {
+    const path = currentDetailPath();
+    const lines = (document.body.innerText || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const titleFromDocument = document.title.replace(/^RisuRealm\s*-\s*/i, '').trim();
+    const title = titleFromDocument
+      || lines.find((line) => !/^(Upload|Account|Download|Options|Help|RisuRealm|Click to preview|Comments are disabled)/i.test(line) && !/^By\s+/i.test(line))
+      || path.split('/').pop()
+      || 'Untitled';
+    const authorLine = lines.find((line) => /^By\s+/i.test(line)) || '';
+    const author = authorLine.replace(/^By\s+/i, '').trim();
+    const image = findBestPageImage(title);
+
+    return {
+      addedAt: state.items[path] ? state.items[path].addedAt : new Date().toISOString(),
+      author,
+      image,
+      path,
+      title,
+      type: detectCurrentPageType(path),
+      url: new URL(path, location.origin).href,
+    };
+  }
+
+  function findBestPageImage(title) {
+    const images = Array.from(document.images)
+      .map((img) => ({
+        alt: (img.alt || '').trim(),
+        area: (img.naturalWidth || img.width || 0) * (img.naturalHeight || img.height || 0),
+        src: img.currentSrc || img.src || img.getAttribute('src') || '',
+      }))
+      .filter((img) => img.src && !img.src.startsWith('data:'));
+    const exactAlt = images.find((img) => img.alt && img.alt === title);
+    if (exactAlt) return exactAlt.src;
+
+    images.sort((a, b) => b.area - a.area);
+    return images[0] ? images[0].src : '';
   }
 
   function scanCards() {
@@ -430,6 +579,88 @@
     }
   }
 
+  function findDetailCardContainer() {
+    const path = currentDetailPath();
+    if (!path) return null;
+
+    const title = document.title.replace(/^RisuRealm\s*-\s*/i, '').trim();
+    const candidates = Array.from(document.querySelectorAll('main, article, section, div'))
+      .filter((el) => {
+        if (toolbar && toolbar.contains(el)) return false;
+        if (panel && panel.contains(el)) return false;
+        if (detailButton && detailButton.contains(el)) return false;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 160 || rect.height < 120) return false;
+
+        const text = (el.innerText || '').trim();
+        if (!text || text.length > 20000) return false;
+        if (title && !text.includes(title)) return false;
+        if (!/\bBy\s+/i.test(text) && !text.includes('By ')) return false;
+
+        const hasAction = /\bDownload\b|\bOptions\b|Click to/i.test(text);
+        const hasImage = Boolean(el.querySelector('img'));
+        return hasAction || hasImage;
+      })
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        return { el, area: rect.width * rect.height, y: rect.top };
+      })
+      .sort((a, b) => a.area - b.area || a.y - b.y);
+
+    return candidates[0] ? candidates[0].el : null;
+  }
+
+  function renderDetailButton() {
+    const path = currentDetailPath();
+    const container = findDetailCardContainer();
+
+    if (!path || !container) {
+      if (detailButton) {
+        detailButton.remove();
+        detailButton = null;
+      }
+      return;
+    }
+
+    if (!detailButton) {
+      detailButton = document.createElement('button');
+      detailButton.className = 'rrw-detail-button';
+      detailButton.type = 'button';
+      detailButton.addEventListener('click', toggleCurrentPage);
+    }
+
+    container.classList.add('rrw-detail-card');
+    if (detailButton.parentElement !== container) container.append(detailButton);
+    updateDetailButton();
+  }
+
+  function toggleCurrentPage() {
+    const meta = extractCurrentPageMeta();
+    const next = { ...state, items: { ...state.items } };
+
+    if (next.items[meta.path]) {
+      delete next.items[meta.path];
+    } else {
+      next.items[meta.path] = meta;
+    }
+
+    writeStore(next);
+  }
+
+  function updateDetailButton() {
+    if (!detailButton) return;
+
+    const path = currentDetailPath();
+    const saved = Boolean(path && state.items[path]);
+    const text = saved ? '♥' : '♡';
+
+    if (detailButton.textContent !== text) detailButton.textContent = text;
+    detailButton.setAttribute('aria-label', saved ? '从心愿单移除' : '加入心愿单');
+    detailButton.setAttribute('title', saved ? '从心愿单移除' : '加入心愿单');
+    detailButton.setAttribute('aria-pressed', String(saved));
+  }
+
   function renderToolbar() {
     if (toolbar) return;
 
@@ -458,7 +689,10 @@
 
   function updateToolbar() {
     if (!toolbar) return;
-    const count = Object.keys(state.items).length;
+    const count = Object.values(state.items).filter((item) => {
+      const key = wishlistGroupKey(item);
+      return key === 'character' || key === 'preset';
+    }).length;
     const countNode = toolbar.querySelector('[data-rrw-count]');
     if (countNode) countNode.textContent = String(count);
     const filterButton = toolbar.querySelector('[data-rrw-action="filter"]');
@@ -490,6 +724,10 @@
     if (!panel) return;
 
     const items = Object.values(state.items).sort((a, b) => String(b.addedAt || '').localeCompare(String(a.addedAt || '')));
+    const characterItems = items.filter((item) => wishlistGroupKey(item) === 'character');
+    const presetItems = items.filter((item) => wishlistGroupKey(item) === 'preset');
+    const visibleTotal = characterItems.length + presetItems.length;
+    const activeItems = panelFilter === 'preset' ? presetItems : characterItems;
     panel.innerHTML = '';
 
     const header = document.createElement('div');
@@ -497,7 +735,7 @@
 
     const title = document.createElement('div');
     title.className = 'rrw-panel-title';
-    title.textContent = `心愿单 (${items.length})`;
+    title.textContent = `心愿单 (${visibleTotal})`;
 
     const actions = document.createElement('div');
     actions.className = 'rrw-panel-actions';
@@ -529,58 +767,100 @@
     header.append(title, actions);
     panel.append(header);
 
-    if (!items.length) {
+    const tabs = document.createElement('div');
+    tabs.className = 'rrw-tabs';
+    tabs.append(
+      createWishlistTab('character', `角色卡 (${characterItems.length})`),
+      createWishlistTab('preset', `预设 (${presetItems.length})`),
+    );
+    panel.append(tabs);
+
+    if (!visibleTotal) {
       const empty = document.createElement('div');
       empty.className = 'rrw-empty';
-      empty.textContent = '还没有加入心愿单的卡片。';
+      empty.textContent = '还没有加入心愿单的角色卡或预设。';
+      panel.append(empty);
+      return;
+    }
+
+    if (!activeItems.length) {
+      const empty = document.createElement('div');
+      empty.className = 'rrw-empty';
+      empty.textContent = panelFilter === 'preset'
+        ? '还没有加入心愿单的预设。'
+        : '还没有加入心愿单的角色卡。';
       panel.append(empty);
       return;
     }
 
     const list = document.createElement('div');
     list.className = 'rrw-list';
-
-    items.forEach((item) => {
-      const row = document.createElement('a');
-      row.className = 'rrw-item';
-      row.href = item.url || new URL(item.path, location.origin).href;
-
-      const img = document.createElement('img');
-      img.alt = '';
-      img.loading = 'lazy';
-      img.src = item.image || '';
-
-      const main = document.createElement('div');
-      main.className = 'rrw-item-main';
-
-      const itemTitle = document.createElement('div');
-      itemTitle.className = 'rrw-item-title';
-      itemTitle.textContent = item.title || 'Untitled';
-
-      const meta = document.createElement('div');
-      meta.className = 'rrw-item-meta';
-      meta.textContent = item.author ? `By ${item.author}` : item.type || '';
-
-      const remove = document.createElement('button');
-      remove.className = 'rrw-remove';
-      remove.type = 'button';
-      remove.textContent = '×';
-      remove.title = '移除';
-      remove.setAttribute('aria-label', `移除 ${item.title || item.path}`);
-      remove.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const next = { ...state, items: { ...state.items } };
-        delete next.items[item.path];
-        writeStore(next);
-      });
-
-      main.append(itemTitle, meta);
-      row.append(img, main, remove);
-      list.append(row);
+    activeItems.forEach((item) => {
+      list.append(createWishlistRow(item));
     });
 
     panel.append(list);
+  }
+
+  function createWishlistTab(filter, label) {
+    const button = document.createElement('button');
+    button.className = 'rrw-tab';
+    button.type = 'button';
+    button.textContent = label;
+    button.setAttribute('aria-pressed', String(panelFilter === filter));
+    button.addEventListener('click', () => {
+      panelFilter = filter;
+      renderPanel();
+    });
+    return button;
+  }
+
+  function wishlistGroupKey(item) {
+    const type = String(item.type || typeFromPath(item.path || '')).toLowerCase();
+    if (type === 'character') return 'character';
+    if (type === 'preset') return 'preset';
+    if (type === 'module' || type === 'lorebook') return 'module';
+    return 'other';
+  }
+
+  function createWishlistRow(item) {
+    const row = document.createElement('a');
+    row.className = 'rrw-item';
+    row.href = item.url || new URL(item.path, location.origin).href;
+
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.src = item.image || '';
+
+    const main = document.createElement('div');
+    main.className = 'rrw-item-main';
+
+    const itemTitle = document.createElement('div');
+    itemTitle.className = 'rrw-item-title';
+    itemTitle.textContent = item.title || 'Untitled';
+
+    const meta = document.createElement('div');
+    meta.className = 'rrw-item-meta';
+    meta.textContent = item.author ? `By ${item.author}` : item.type || '';
+
+    const remove = document.createElement('button');
+    remove.className = 'rrw-remove';
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.title = '移除';
+    remove.setAttribute('aria-label', `移除 ${item.title || item.path}`);
+    remove.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const next = { ...state, items: { ...state.items } };
+      delete next.items[item.path];
+      writeStore(next);
+    });
+
+    main.append(itemTitle, meta);
+    row.append(img, main, remove);
+    return row;
   }
 
   function exportWishlist() {
@@ -653,7 +933,7 @@
     entries.forEach(([path, item]) => {
       if (!item || typeof item !== 'object') return;
       const normalizedPath = canonicalPath(item.path || path || item.url || '');
-      if (!/^\/(character|preset|module)\//.test(normalizedPath)) return;
+      if (!DETAIL_PATH_RE.test(normalizedPath)) return;
       items[normalizedPath] = {
         addedAt: item.addedAt || new Date().toISOString(),
         author: String(item.author || ''),
@@ -670,6 +950,7 @@
 
   function refreshAll() {
     document.querySelectorAll('a.rrw-card').forEach(updateCard);
+    renderDetailButton();
     applyFilter();
     updateToolbar();
     renderPanel();
@@ -687,6 +968,7 @@
     observerScheduled = true;
     requestAnimationFrame(() => {
       observerScheduled = false;
+      renderDetailButton();
       scanCards();
     });
   }
