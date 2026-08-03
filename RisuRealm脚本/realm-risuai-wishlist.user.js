@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.3.1
+// @version      1.3.2
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -446,7 +446,15 @@
 
   function isCard(anchor) {
     const path = canonicalPath(anchor.getAttribute('href') || anchor.href);
-    return DETAIL_PATH_RE.test(path);
+    if (!DETAIL_PATH_RE.test(path)) return false;
+
+    const text = (anchor.innerText || '').trim();
+    const className = String(anchor.className || '');
+    const rect = anchor.getBoundingClientRect();
+    const hasCardClass = /\bborder\b/.test(className) && /\bflex\b/.test(className) && /\brounded-md\b/.test(className);
+    const hasCardContent = Boolean(anchor.querySelector('img')) && /\bBy\s+/i.test(text);
+
+    return hasCardClass && hasCardContent && rect.width >= 160 && rect.height >= 100;
   }
 
   function extractMeta(card) {
@@ -516,7 +524,11 @@
 
   function scanCards() {
     document.querySelectorAll(CARD_SELECTOR).forEach((card) => {
-      if (!(card instanceof HTMLAnchorElement) || !isCard(card)) return;
+      if (!(card instanceof HTMLAnchorElement)) return;
+      if (!isCard(card)) {
+        resetCardButton(card);
+        return;
+      }
       if (card.dataset.rrwReady === '1') {
         updateCard(card);
         return;
@@ -546,6 +558,14 @@
 
     applyFilter();
     updateToolbar();
+  }
+
+  function resetCardButton(card) {
+    Array.from(card.children).forEach((child) => {
+      if (child.classList && child.classList.contains('rrw-heart')) child.remove();
+    });
+    card.classList.remove('rrw-card', 'rrw-hidden');
+    delete card.dataset.rrwReady;
   }
 
   function stopCardOpen(event) {
