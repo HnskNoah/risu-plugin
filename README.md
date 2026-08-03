@@ -9,6 +9,12 @@ RisuAI v3 插件集合。
 | **KeyVault** | [`keyvault/`](keyvault/) | ⚠️ 不可用 | 多服务商 API Key 统一管理 |
 | **Todown** | [`todown/`](todown/) | ✅ 可用 | 聊天页常驻「跳转至最新」按钮 |
 
+## 用户脚本
+
+| 脚本 | 目录 | 说明 |
+|---|---|---|
+| **RisuRealm Wishlist** | [`RisuRealm脚本/`](RisuRealm脚本/) | RisuRealm 卡片爱心收藏 + 本地导入/导出心愿单(需 Tampermonkey 等油猴扩展) |
+
 ## 构建
 
 每个插件独立工程:
