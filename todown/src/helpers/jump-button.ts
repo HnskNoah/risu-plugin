@@ -6,10 +6,21 @@ const PENDING_CLASS = "todown-pending"
 const BOTTOM_EPSILON = 8
 const SCROLL_THROTTLE_MS = 80
 const MUTATION_DEBOUNCE_MS = 300
+const DRAG_THRESHOLD = 5
+const BUTTON_SIZE = 48
+const DEFAULT_LEFT = 14
+const INPUT_HEIGHT_MULTIPLIER = 1.2
+const FALLBACK_INPUT_HEIGHT = 56
+const POSITION_STORAGE_KEY = "todown-position"
 
 const CHAT_SCREEN_SELECTORS = [".default-chat-screen"] as const
 const CHAT_BODY_SELECTOR = ".default-chat-screen > div.flex.flex-col-reverse"
 const MESSAGE_SELECTORS = [".default-chat-screen .risu-chat"] as const
+const INPUT_SELECTORS = [
+  ".default-chat-screen textarea",
+  ".default-chat-screen [contenteditable]",
+  ".default-chat-screen input[type='text']",
+] as const
 const BUTTON_MARKER = "x-todown-jump"
 
 const BUTTON_HTML =
@@ -18,7 +29,7 @@ const BUTTON_HTML =
 const BUTTON_CSS = `.${BUTTON_CLASS} {
   position: fixed;
   left: 14px;
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  bottom: 67px;
   z-index: 2147483000;
   width: 44px;
   height: 44px;
@@ -29,7 +40,8 @@ const BUTTON_CSS = `.${BUTTON_CLASS} {
   border: 1px solid rgba(128, 128, 128, 0.35);
   background: rgba(24, 24, 27, 0.85);
   color: #e4e4e7;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
@@ -38,6 +50,9 @@ const BUTTON_CSS = `.${BUTTON_CLASS} {
 }
 .${BUTTON_CLASS}:hover {
   background: rgba(39, 39, 42, 0.92);
+}
+.${BUTTON_CLASS}:active {
+  cursor: grabbing;
 }
 .${BUTTON_CLASS}.${AT_BOTTOM_CLASS} {
   opacity: 0.4;
@@ -64,6 +79,14 @@ type MessageSet = {
   readonly chatBody: SafeElement | null
   readonly first: SafeElement | null
 }
+
+type StoredPosition = {
+  readonly x: number
+  readonly y: number
+}
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(Math.max(value, min), Math.max(min, max))
 
 const queryFirst = async (
   doc: SafeDocument,
@@ -93,6 +116,52 @@ const queryMessages = async (doc: SafeDocument): Promise<MessageSet> => {
   return { chatBody, first: null }
 }
 
+const measureInputHeight = async (doc: SafeDocument): Promise<number> => {
+  for (const selector of INPUT_SELECTORS) {
+    const element = await doc.querySelector(selector)
+    if (element === null) {
+      continue
+    }
+    const rect = await element.getBoundingClientRect()
+    if (rect.height > 0) {
+      return rect.height
+    }
+  }
+  return FALLBACK_INPUT_HEIGHT
+}
+
+const loadPosition = async (): Promise<StoredPosition | null> => {
+  try {
+    const storage = await risuai.getLocalPluginStorage()
+    const stored = await storage.getItem<StoredPosition>(POSITION_STORAGE_KEY)
+    if (
+      stored === null ||
+      typeof stored !== "object" ||
+      typeof stored.x !== "number" ||
+      typeof stored.y !== "number" ||
+      !Number.isFinite(stored.x) ||
+      !Number.isFinite(stored.y)
+    ) {
+      return null
+    }
+    return { x: stored.x, y: stored.y }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to load position: ${message}`)
+    return null
+  }
+}
+
+const savePosition = async (position: StoredPosition): Promise<void> => {
+  try {
+    const storage = await risuai.getLocalPluginStorage()
+    await storage.setItem(POSITION_STORAGE_KEY, position)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to save position: ${message}`)
+  }
+}
+
 export const createJumpButton = async (): Promise<void> => {
   const doc = await risuai.getRootDocument()
   const existing = await doc.querySelector(`[${BUTTON_MARKER}]`)
@@ -118,14 +187,14 @@ export const createJumpButton = async (): Promise<void> => {
   if (styleTag !== "STYLE") {
     await button.setStyle("position", "fixed")
     await button.setStyle("left", "14px")
-    await button.setStyle("bottom", "14px")
+    await button.setStyle("bottom", "67px")
     await button.setStyle("z-index", "2147483000")
     await button.setStyle("width", "44px")
     await button.setStyle("height", "44px")
     await button.setStyle("border-radius", "9999px")
     await button.setStyle("background", "rgba(24, 24, 27, 0.85)")
     await button.setStyle("color", "#e4e4e7")
-    await button.setStyle("cursor", "pointer")
+    await button.setStyle("cursor", "grab")
   }
 
   await body.appendChild(button)
@@ -141,6 +210,21 @@ export const createJumpButton = async (): Promise<void> => {
   let refreshQueued = false
   let lastScrollAt = 0
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const inputHeight = await measureInputHeight(doc)
+  let posX = DEFAULT_LEFT
+  let posY = Math.round(inputHeight * INPUT_HEIGHT_MULTIPLIER)
+  const storedPosition = await loadPosition()
+  if (storedPosition !== null) {
+    posX = storedPosition.x
+    posY = storedPosition.y
+  }
+
+  const applyPosition = async (): Promise<void> => {
+    await button.setStyle("left", `${posX}px`)
+    await button.setStyle("bottom", `${posY}px`)
+  }
+  await applyPosition()
 
   const unwireScroll = async (): Promise<void> => {
     for (const listener of listeners) {
@@ -233,13 +317,92 @@ export const createJumpButton = async (): Promise<void> => {
     }, MUTATION_DEBOUNCE_MS)
   }
 
+  const isInsideButton = async (event: unknown): Promise<boolean> => {
+    const point = event as { readonly clientX?: unknown; readonly clientY?: unknown }
+    if (typeof point.clientX !== "number" || typeof point.clientY !== "number") {
+      return false
+    }
+    const rect = await button.getBoundingClientRect()
+    return (
+      point.clientX >= rect.left &&
+      point.clientX <= rect.right &&
+      point.clientY >= rect.top &&
+      point.clientY <= rect.bottom
+    )
+  }
+
+  const clampToViewport = async (x: number, y: number): Promise<{ x: number; y: number }> => {
+    const viewportWidth = await body.clientWidth()
+    const viewportHeight = await body.clientHeight()
+    return {
+      x: clamp(x, 0, Math.max(0, viewportWidth - BUTTON_SIZE)),
+      y: clamp(y, 0, Math.max(0, viewportHeight - BUTTON_SIZE)),
+    }
+  }
+
+  let dragging = false
+  let suppressClick = false
+  let dragStartX = 0
+  let dragStartY = 0
+  let moveStartX = 0
+  let moveStartY = 0
+
+  await button.addEventListener("pointerdown", (event) => {
+    void (async () => {
+      if (!(await isInsideButton(event))) {
+        return
+      }
+      const point = event as { readonly clientX?: unknown; readonly clientY?: unknown }
+      dragging = true
+      suppressClick = false
+      dragStartX = Number(point.clientX)
+      dragStartY = Number(point.clientY)
+      moveStartX = posX
+      moveStartY = posY
+    })()
+  })
+
+  await button.addEventListener("pointermove", (event) => {
+    void (async () => {
+      if (!dragging) {
+        return
+      }
+      const point = event as { readonly clientX?: unknown; readonly clientY?: unknown }
+      if (typeof point.clientX !== "number" || typeof point.clientY !== "number") {
+        return
+      }
+      const dx = point.clientX - dragStartX
+      const dy = point.clientY - dragStartY
+      if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
+        suppressClick = true
+      }
+      const next = await clampToViewport(moveStartX + dx, moveStartY - dy)
+      posX = next.x
+      posY = next.y
+      await applyPosition()
+    })()
+  })
+
+  await button.addEventListener("pointerup", (event) => {
+    void (async () => {
+      if (!dragging) {
+        return
+      }
+      dragging = false
+      if (suppressClick) {
+        await savePosition({ x: posX, y: posY })
+      }
+    })()
+  })
+
   await button.addEventListener("click", (event) => {
     void (async () => {
+      if (suppressClick) {
+        suppressClick = false
+        return
+      }
       const point = event as { readonly clientX?: unknown; readonly clientY?: unknown }
-      if (
-        typeof point.clientX !== "number" ||
-        typeof point.clientY !== "number"
-      ) {
+      if (typeof point.clientX !== "number" || typeof point.clientY !== "number") {
         return
       }
       const rect = await button.getBoundingClientRect()
