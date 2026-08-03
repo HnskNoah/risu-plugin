@@ -1,0 +1,36 @@
+{
+  "name": "keyvault",
+  "version": "1.0.0",
+  "description": "API key manager for RISU AI",
+  "type": "module",
+  "main": "dist/risu-plugin-template.js",
+  "browser": "dist/keyvault.js",
+  "unpkg": "dist/keyvault.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "risuai",
+    "risu-ai",
+    "plugin",
+    "vite",
+    "typescript"
+  ],
+  "author": "Chaebboong",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^8.0.10",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.9.3",
+    "@types/node": "^22.12.0"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10.0.0"
+  }
+}
