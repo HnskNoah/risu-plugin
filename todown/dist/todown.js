@@ -4,7 +4,7 @@
 //@version 1.0.0
 //@description Always-visible jump-to-latest button for RISU AI
 //@link https://unpkg.com/todown@1.0.0/dist/todown.js
-var f = "todown", l = "todown-jump-button", S = "todown-at-bottom", x = "todown-pending", q = 8, F = 80, G = 300, j = 5, M = 48, z = 14, K = 1.2, V = 56, A = "todown-position", W = [".default-chat-screen"], J = ".default-chat-screen > div.flex.flex-col-reverse", Q = [".default-chat-screen .risu-chat"], Z = [
+var c = "todown", l = "todown-jump-button", S = "todown-at-bottom", x = "todown-pending", q = 8, F = 80, G = 300, j = 5, M = 48, z = 14, K = 1.2, V = 56, H = "todown-position", W = [".default-chat-screen"], J = ".default-chat-screen > div.flex.flex-col-reverse", Q = [".default-chat-screen .risu-chat"], Z = [
   ".default-chat-screen textarea",
   ".default-chat-screen [contenteditable]",
   ".default-chat-screen input[type='text']"
@@ -49,176 +49,183 @@ var f = "todown", l = "todown-jump-button", S = "todown-at-bottom", x = "todown-
     left: 10px;
     bottom: calc(12px + env(safe-area-inset-bottom));
   }
-}`, R = (a, r, e) => Math.min(Math.max(a, r), Math.max(r, e)), at = async (a, r) => {
-  for (const e of r) {
+}`, R = (a, i, e) => Math.min(Math.max(a, i), Math.max(i, e)), at = async (a, i) => {
+  for (const e of i) {
     const o = await a.querySelector(e);
     if (o !== null) return o;
   }
   return null;
-}, $ = async (a) => {
-  const r = await a.querySelector(J);
+}, A = async (a) => {
+  const i = await a.querySelector(J);
   for (const e of Q) {
     const o = await a.querySelectorAll(e);
     if (await o.length() > 0) return {
-      chatBody: r,
+      chatBody: i,
       first: await o.at(0) ?? null
     };
   }
   return {
-    chatBody: r,
+    chatBody: i,
     first: null
   };
-}, it = async (a) => {
-  for (const r of Z) {
-    const e = await a.querySelector(r);
+}, rt = async (a) => {
+  for (const i of Z) {
+    const e = await a.querySelector(i);
     if (e === null) continue;
     const o = await e.getBoundingClientRect();
     if (o.height > 0) return o.height;
   }
   return V;
-}, rt = async () => {
+}, it = async () => {
   try {
-    const a = await (await risuai.getLocalPluginStorage()).getItem(A);
+    const a = await (await risuai.getLocalPluginStorage()).getItem(H);
     return a === null || typeof a != "object" || typeof a.x != "number" || typeof a.y != "number" || !Number.isFinite(a.x) || !Number.isFinite(a.y) ? null : {
       x: a.x,
       y: a.y
     };
   } catch (a) {
-    const r = a instanceof Error ? a.message : String(a);
-    return console.error(`[${f}] failed to load position: ${r}`), null;
+    const i = a instanceof Error ? a.message : String(a);
+    return console.error(`[${c}] failed to load position: ${i}`), null;
   }
 }, nt = async (a) => {
   try {
-    await (await risuai.getLocalPluginStorage()).setItem(A, a);
-  } catch (r) {
-    const e = r instanceof Error ? r.message : String(r);
-    console.error(`[${f}] failed to save position: ${e}`);
+    await (await risuai.getLocalPluginStorage()).setItem(H, a);
+  } catch (i) {
+    const e = i instanceof Error ? i.message : String(i);
+    console.error(`[${c}] failed to save position: ${e}`);
   }
 }, ot = async () => {
   const a = await risuai.getRootDocument();
+  if (a === null) {
+    console.error(`[${c}] main document access denied or unavailable; grant permission and reload`);
+    return;
+  }
   if (await a.querySelector(`[${N}]`) !== null) return;
-  const r = await a.querySelector("body");
-  if (r === null) throw new Error("main document body not found");
+  const i = await a.querySelector("body");
+  if (i === null) throw new Error("main document body not found");
   const e = await a.createElement("button");
   await e.addClass(l), await e.setAttribute(N, "1"), await e.setInnerHTML(tt);
   const o = await a.createElement("style");
-  await o.setTextContent(et), await r.appendChild(o), await o.nodeName() !== "STYLE" && (await e.setStyle("position", "fixed"), await e.setStyle("left", "14px"), await e.setStyle("bottom", "67px"), await e.setStyle("z-index", "2147483000"), await e.setStyle("width", "44px"), await e.setStyle("height", "44px"), await e.setStyle("border-radius", "9999px"), await e.setStyle("background", "rgba(24, 24, 27, 0.85)"), await e.setStyle("color", "#e4e4e7"), await e.setStyle("cursor", "grab")), await r.appendChild(e), await (await risuai.createMutationObserver(() => {
-    U(!0);
-  })).observe(r, {
+  await o.setTextContent(et), await i.appendChild(o), await o.nodeName() !== "STYLE" && (await e.setStyle("position", "fixed"), await e.setStyle("left", "14px"), await e.setStyle("bottom", "67px"), await e.setStyle("z-index", "2147483000"), await e.setStyle("width", "44px"), await e.setStyle("height", "44px"), await e.setStyle("border-radius", "9999px"), await e.setStyle("background", "rgba(24, 24, 27, 0.85)"), await e.setStyle("color", "#e4e4e7"), await e.setStyle("cursor", "grab")), await i.appendChild(e), await (await risuai.createMutationObserver(() => {
+    X(!0);
+  })).observe(i, {
     childList: !0,
     subtree: !0
   });
   let h = [], m = !1, g = !1, b = !1, T = 0, p = null;
-  const H = await it(a);
-  let c = z, u = Math.round(H * K);
-  const v = await rt();
-  v !== null && (c = v.x, u = v.y);
-  const E = async () => {
-    await e.setStyle("left", `${c}px`), await e.setStyle("bottom", `${u}px`);
-  };
-  await E();
+  const E = async (r, t) => {
+    const n = await i.clientWidth(), s = await i.clientHeight();
+    return {
+      x: R(r, 0, Math.max(0, n - M)),
+      y: R(t, 0, Math.max(0, s - M))
+    };
+  }, Y = await rt(a);
+  let u = z, d = Math.round(Y * K);
+  const v = await it();
+  if (v !== null) {
+    const r = await E(v.x, v.y);
+    u = r.x, d = r.y;
+  }
   const L = async () => {
-    for (const i of h) await i.element.removeEventListener(i.type, i.id).catch(() => {
+    await e.setStyle("left", `${u}px`), await e.setStyle("bottom", `${d}px`);
+  };
+  await L();
+  const C = async () => {
+    for (const r of h) await r.element.removeEventListener(r.type, r.id).catch(() => {
     });
     h = [];
-  }, Y = async (i) => {
-    await L();
-    for (const t of i) {
-      const n = await t.addEventListener("scroll", P);
+  }, k = async (r) => {
+    await C();
+    for (const t of r) {
+      const n = await t.addEventListener("scroll", U);
       h.push({
         element: t,
         type: "scroll",
         id: n
       });
     }
-  }, k = async (i, t) => {
-    if (i !== null && t.first !== null) {
-      const n = await i.getBoundingClientRect();
+  }, P = async (r, t) => {
+    if (r !== null && t.first !== null) {
+      const n = await r.getBoundingClientRect();
       let s = (await t.first.getBoundingClientRect()).bottom >= n.bottom - q;
-      !s && t.chatBody !== null && (s = await t.chatBody.clientHeight() <= await i.clientHeight()), s !== m && (s ? await e.addClass(S) : await e.removeClass(S), m = s), await e.removeClass(x);
+      !s && t.chatBody !== null && (s = await t.chatBody.clientHeight() <= await r.clientHeight()), s !== m && (s ? await e.addClass(S) : await e.removeClass(S), m = s), await e.removeClass(x);
     } else
       m = !1, await e.addClass(x);
-  }, d = async (i) => {
+  }, w = async (r) => {
     if (g) {
       b = !0;
       return;
     }
     g = !0;
     try {
-      const t = await at(a, W), n = await $(a);
-      i && await Y(t === null ? [] : [t]), await k(t, n);
+      const t = await at(a, W), n = await A(a);
+      r && await k(t === null ? [] : [t]), await P(t, n);
     } catch (t) {
-      t instanceof Error && console.error(`[${f}] refresh failed: ${t.message}`);
+      t instanceof Error && console.error(`[${c}] refresh failed: ${t.message}`);
     } finally {
-      g = !1, b && (b = !1, d(!0));
+      g = !1, b && (b = !1, w(!0));
     }
-  }, P = () => {
-    const i = Date.now();
-    i - T < F || (T = i, d(!1));
-  }, U = (i) => {
+  }, U = () => {
+    const r = Date.now();
+    r - T < F || (T = r, w(!1));
+  }, X = (r) => {
     p !== null && clearTimeout(p), p = setTimeout(() => {
-      p = null, d(i);
+      p = null, w(r);
     }, G);
-  }, X = async (i) => {
-    const t = i;
+  }, D = async (r) => {
+    const t = r;
     if (typeof t.clientX != "number" || typeof t.clientY != "number") return !1;
     const n = await e.getBoundingClientRect();
     return t.clientX >= n.left && t.clientX <= n.right && t.clientY >= n.top && t.clientY <= n.bottom;
-  }, D = async (i, t) => {
-    const n = await r.clientWidth(), s = await r.clientHeight();
-    return {
-      x: R(i, 0, Math.max(0, n - M)),
-      y: R(t, 0, Math.max(0, s - M))
-    };
   };
-  let y = !1, w = !1, C = 0, _ = 0, B = 0, O = 0;
-  await e.addEventListener("pointerdown", (i) => {
+  let y = !1, f = !1, _ = 0, B = 0, O = 0, $ = 0;
+  await e.addEventListener("pointerdown", (r) => {
     (async () => {
-      if (!await X(i)) return;
-      const t = i;
-      y = !0, w = !1, C = Number(t.clientX), _ = Number(t.clientY), B = c, O = u;
+      if (!await D(r)) return;
+      const t = r;
+      y = !0, f = !1, _ = Number(t.clientX), B = Number(t.clientY), O = u, $ = d;
     })();
-  }), await e.addEventListener("pointermove", (i) => {
+  }), await e.addEventListener("pointermove", (r) => {
     (async () => {
       if (!y) return;
-      const t = i;
+      const t = r;
       if (typeof t.clientX != "number" || typeof t.clientY != "number") return;
-      const n = t.clientX - C, s = t.clientY - _;
-      Math.abs(n) + Math.abs(s) > j && (w = !0);
-      const I = await D(B + n, O - s);
-      c = I.x, u = I.y, await E();
+      const n = t.clientX - _, s = t.clientY - B;
+      Math.abs(n) + Math.abs(s) > j && (f = !0);
+      const I = await E(O + n, $ - s);
+      u = I.x, d = I.y, await L();
     })();
-  }), await e.addEventListener("pointerup", (i) => {
-    (async () => y && (y = !1, w && await nt({
-      x: c,
-      y: u
+  }), await e.addEventListener("pointerup", (r) => {
+    (async () => y && (y = !1, f && await nt({
+      x: u,
+      y: d
     })))();
-  }), await e.addEventListener("click", (i) => {
+  }), await e.addEventListener("click", (r) => {
     (async () => {
-      if (w) {
-        w = !1;
+      if (f) {
+        f = !1;
         return;
       }
-      const t = i;
+      const t = r;
       if (typeof t.clientX != "number" || typeof t.clientY != "number") return;
       const n = await e.getBoundingClientRect();
       if (t.clientX < n.left || t.clientX > n.right || t.clientY < n.top || t.clientY > n.bottom) return;
-      console.info(`[${f}] jump button clicked at (${t.clientX}, ${t.clientY})`);
-      const s = await $(a);
+      console.info(`[${c}] jump button clicked at (${t.clientX}, ${t.clientY})`);
+      const s = await A(a);
       s.first !== null && (await s.first.scrollIntoView({
         behavior: "instant",
         block: "start"
-      }), await d(!0));
+      }), await w(!0));
     })();
   }), await risuai.onUnload(async () => {
-    await L(), await e.remove().catch(() => {
+    await C(), await e.remove().catch(() => {
     }), await o.remove().catch(() => {
     });
-  }), await d(!0);
+  }), await w(!0);
 };
 try {
   await ot();
 } catch (a) {
-  const r = a instanceof Error ? a.message : "Unknown error";
-  console.error(`[${f}] initialization failed: ${r}`);
+  const i = a instanceof Error ? a.message : "Unknown error";
+  console.error(`[${c}] initialization failed: ${i}`);
 }

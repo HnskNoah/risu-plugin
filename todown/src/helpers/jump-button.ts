@@ -164,6 +164,12 @@ const savePosition = async (position: StoredPosition): Promise<void> => {
 
 export const createJumpButton = async (): Promise<void> => {
   const doc = await risuai.getRootDocument()
+  if (doc === null) {
+    console.error(
+      `[${PLUGIN_DISPLAY_NAME}] main document access denied or unavailable; grant permission and reload`,
+    )
+    return
+  }
   const existing = await doc.querySelector(`[${BUTTON_MARKER}]`)
   if (existing !== null) {
     return
@@ -211,13 +217,23 @@ export const createJumpButton = async (): Promise<void> => {
   let lastScrollAt = 0
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
+  const clampToViewport = async (x: number, y: number): Promise<{ x: number; y: number }> => {
+    const viewportWidth = await body.clientWidth()
+    const viewportHeight = await body.clientHeight()
+    return {
+      x: clamp(x, 0, Math.max(0, viewportWidth - BUTTON_SIZE)),
+      y: clamp(y, 0, Math.max(0, viewportHeight - BUTTON_SIZE)),
+    }
+  }
+
   const inputHeight = await measureInputHeight(doc)
   let posX = DEFAULT_LEFT
   let posY = Math.round(inputHeight * INPUT_HEIGHT_MULTIPLIER)
   const storedPosition = await loadPosition()
   if (storedPosition !== null) {
-    posX = storedPosition.x
-    posY = storedPosition.y
+    const clamped = await clampToViewport(storedPosition.x, storedPosition.y)
+    posX = clamped.x
+    posY = clamped.y
   }
 
   const applyPosition = async (): Promise<void> => {
@@ -329,15 +345,6 @@ export const createJumpButton = async (): Promise<void> => {
       point.clientY >= rect.top &&
       point.clientY <= rect.bottom
     )
-  }
-
-  const clampToViewport = async (x: number, y: number): Promise<{ x: number; y: number }> => {
-    const viewportWidth = await body.clientWidth()
-    const viewportHeight = await body.clientHeight()
-    return {
-      x: clamp(x, 0, Math.max(0, viewportWidth - BUTTON_SIZE)),
-      y: clamp(y, 0, Math.max(0, viewportHeight - BUTTON_SIZE)),
-    }
   }
 
   let dragging = false
