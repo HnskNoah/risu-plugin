@@ -15,9 +15,9 @@ const POSITION_STORAGE_KEY = "todown-position"
 const POSITION_STORAGE_KEY_MOBILE = "todown-position-mobile"
 const MOBILE_BREAKPOINT = 768
 
-const CHAT_SCREEN_SELECTORS = [".default-chat-screen"] as const
+const CHAT_SCREEN_SELECTOR = ".default-chat-screen"
 const CHAT_BODY_SELECTOR = ".default-chat-screen > div.flex.flex-col-reverse"
-const MESSAGE_SELECTORS = [".default-chat-screen .risu-chat"] as const
+const MESSAGE_SELECTOR = ".default-chat-screen .risu-chat"
 const INPUT_SELECTORS = [
   ".default-chat-screen textarea",
   ".default-chat-screen [contenteditable]",
@@ -90,32 +90,10 @@ type StoredPosition = {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), Math.max(min, max))
 
-const queryFirst = async (
-  doc: SafeDocument,
-  selectors: readonly string[],
-): Promise<SafeElement | null> => {
-  for (const selector of selectors) {
-    const element = await doc.querySelector(selector)
-    if (element !== null) {
-      return element
-    }
-  }
-  return null
-}
-
 const queryMessages = async (doc: SafeDocument): Promise<MessageSet> => {
   const chatBody = await doc.querySelector(CHAT_BODY_SELECTOR)
-  for (const selector of MESSAGE_SELECTORS) {
-    const list = await doc.querySelectorAll(selector)
-    const length = await list.length()
-    if (length > 0) {
-      return {
-        chatBody,
-        first: (await list.at(0)) ?? null,
-      }
-    }
-  }
-  return { chatBody, first: null }
+  const first = await doc.querySelector(MESSAGE_SELECTOR)
+  return { chatBody, first }
 }
 
 const measureInputHeight = async (doc: SafeDocument): Promise<number> => {
@@ -131,6 +109,9 @@ const measureInputHeight = async (doc: SafeDocument): Promise<number> => {
   }
   return FALLBACK_INPUT_HEIGHT
 }
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
 
 const isMobileViewport = async (body: SafeElement): Promise<boolean> => {
   const width = await body.clientWidth()
@@ -153,8 +134,7 @@ const loadPosition = async (key: string): Promise<StoredPosition | null> => {
     }
     return { x: stored.x, y: stored.y }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to load position: ${message}`)
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to load position: ${errorMessage(error)}`)
     return null
   }
 }
@@ -164,8 +144,7 @@ const savePosition = async (key: string, position: StoredPosition): Promise<void
     const storage = await risuai.getLocalPluginStorage()
     await storage.setItem(key, position)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to save position: ${message}`)
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to save position: ${errorMessage(error)}`)
   }
 }
 
@@ -196,20 +175,6 @@ export const createJumpButton = async (): Promise<void> => {
   await styleElement.setTextContent(BUTTON_CSS)
   await body.appendChild(styleElement)
 
-  const styleTag = await styleElement.nodeName()
-  if (styleTag !== "STYLE") {
-    await button.setStyle("position", "fixed")
-    await button.setStyle("left", "14px")
-    await button.setStyle("bottom", "67px")
-    await button.setStyle("z-index", "2147483000")
-    await button.setStyle("width", "44px")
-    await button.setStyle("height", "44px")
-    await button.setStyle("border-radius", "9999px")
-    await button.setStyle("background", "rgba(24, 24, 27, 0.85)")
-    await button.setStyle("color", "#e4e4e7")
-    await button.setStyle("cursor", "grab")
-  }
-
   await body.appendChild(button)
 
   const observer = await risuai.createMutationObserver(() => {
@@ -237,10 +202,9 @@ export const createJumpButton = async (): Promise<void> => {
   const inputHeight = await measureInputHeight(doc)
   let posX = DEFAULT_LEFT
   let posY = Math.round(inputHeight * INPUT_HEIGHT_MULTIPLIER)
-  const positionKey = (await isMobileViewport(body))
-    ? POSITION_STORAGE_KEY_MOBILE
-    : POSITION_STORAGE_KEY
-  const storedPosition = await loadPosition(positionKey)
+  const positionKey = async (): Promise<string> =>
+    (await isMobileViewport(body)) ? POSITION_STORAGE_KEY_MOBILE : POSITION_STORAGE_KEY
+  const storedPosition = await loadPosition(await positionKey())
   if (storedPosition !== null) {
     const clamped = await clampToViewport(storedPosition.x, storedPosition.y)
     posX = clamped.x
@@ -253,22 +217,13 @@ export const createJumpButton = async (): Promise<void> => {
   }
   await applyPosition()
 
-  const unwireScroll = async (): Promise<void> => {
-    for (const listener of listeners) {
+  const unwireListeners = async (store: StoredListener[]): Promise<void> => {
+    for (const listener of store) {
       await listener.element
         .removeEventListener(listener.type, listener.id)
         .catch(() => undefined)
     }
-    listeners = []
-  }
-
-  const unwireButton = async (): Promise<void> => {
-    for (const listener of buttonListeners) {
-      await listener.element
-        .removeEventListener(listener.type, listener.id)
-        .catch(() => undefined)
-    }
-    buttonListeners.length = 0
+    store.length = 0
   }
 
   const addButtonListener = async (
@@ -280,7 +235,7 @@ export const createJumpButton = async (): Promise<void> => {
   }
 
   const wireScroll = async (targets: SafeElement[]): Promise<void> => {
-    await unwireScroll()
+    await unwireListeners(listeners)
     for (const element of targets) {
       const id = await element.addEventListener("scroll", onScroll)
       listeners.push({ element, type: "scroll", id })
@@ -323,16 +278,14 @@ export const createJumpButton = async (): Promise<void> => {
     }
     refreshInFlight = true
     try {
-      const screen = await queryFirst(doc, CHAT_SCREEN_SELECTORS)
+      const screen = await doc.querySelector(CHAT_SCREEN_SELECTOR)
       const messages = await queryMessages(doc)
       if (rewire) {
         await wireScroll(screen === null ? [] : [screen])
       }
       await updateButtonState(screen, messages)
     } catch (error) {
-      if (error instanceof Error) {
-        console.error(`[${PLUGIN_DISPLAY_NAME}] refresh failed: ${error.message}`)
-      }
+      console.error(`[${PLUGIN_DISPLAY_NAME}] refresh failed: ${errorMessage(error)}`)
     } finally {
       refreshInFlight = false
       if (refreshQueued) {
@@ -382,7 +335,7 @@ export const createJumpButton = async (): Promise<void> => {
   let moveStartX = 0
   let moveStartY = 0
 
-  await button.addEventListener("pointerdown", (event) => {
+  await addButtonListener("pointerdown", (event) => {
     void (async () => {
       if (!(await isInsideButton(event))) {
         return
@@ -390,14 +343,14 @@ export const createJumpButton = async (): Promise<void> => {
       const point = event as { readonly clientX?: unknown; readonly clientY?: unknown }
       dragging = true
       suppressClick = false
-      dragStartX = Number(point.clientX)
-      dragStartY = Number(point.clientY)
+      dragStartX = point.clientX as number
+      dragStartY = point.clientY as number
       moveStartX = posX
       moveStartY = posY
     })()
   })
 
-  await button.addEventListener("pointermove", (event) => {
+  await addButtonListener("pointermove", (event) => {
     void (async () => {
       if (!dragging) {
         return
@@ -418,22 +371,19 @@ export const createJumpButton = async (): Promise<void> => {
     })()
   })
 
-  await button.addEventListener("pointerup", (event) => {
+  await addButtonListener("pointerup", (event) => {
     void (async () => {
       if (!dragging) {
         return
       }
       dragging = false
       if (suppressClick) {
-        const key = (await isMobileViewport(body))
-          ? POSITION_STORAGE_KEY_MOBILE
-          : POSITION_STORAGE_KEY
-        await savePosition(key, { x: posX, y: posY })
+        await savePosition(await positionKey(), { x: posX, y: posY })
       }
     })()
   })
 
-  await button.addEventListener("pointercancel", (event) => {
+  await addButtonListener("pointercancel", (event) => {
     void (async () => {
       if (!dragging) {
         return
@@ -443,26 +393,15 @@ export const createJumpButton = async (): Promise<void> => {
     })()
   })
 
-  await button.addEventListener("click", (event) => {
+  await addButtonListener("click", (event) => {
     void (async () => {
       if (suppressClick) {
         suppressClick = false
         return
       }
-      const point = event as { readonly clientX?: unknown; readonly clientY?: unknown }
-      if (typeof point.clientX !== "number" || typeof point.clientY !== "number") {
+      if (!(await isInsideButton(event))) {
         return
       }
-      const rect = await button.getBoundingClientRect()
-      if (
-        point.clientX < rect.left ||
-        point.clientX > rect.right ||
-        point.clientY < rect.top ||
-        point.clientY > rect.bottom
-      ) {
-        return
-      }
-      console.info(`[${PLUGIN_DISPLAY_NAME}] jump button clicked at (${point.clientX}, ${point.clientY})`)
       const messages = await queryMessages(doc)
       if (messages.first === null) {
         return
@@ -473,8 +412,8 @@ export const createJumpButton = async (): Promise<void> => {
   })
 
   await risuai.onUnload(async () => {
-    await unwireButton()
-    await unwireScroll()
+    await unwireListeners(buttonListeners)
+    await unwireListeners(listeners)
     await button.remove().catch(() => undefined)
     await styleElement.remove().catch(() => undefined)
   })
