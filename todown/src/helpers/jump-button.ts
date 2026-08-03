@@ -381,7 +381,6 @@ export const createJumpButton = async (): Promise<void> => {
   let dragStartY = 0
   let moveStartX = 0
   let moveStartY = 0
-  let rafPending = false
 
   await button.addEventListener("pointerdown", (event) => {
     void (async () => {
@@ -415,13 +414,7 @@ export const createJumpButton = async (): Promise<void> => {
       const next = await clampToViewport(moveStartX + dx, moveStartY - dy)
       posX = next.x
       posY = next.y
-      if (!rafPending) {
-        rafPending = true
-        requestAnimationFrame(() => {
-          rafPending = false
-          void applyPosition()
-        })
-      }
+      await applyPosition()
     })()
   })
 
