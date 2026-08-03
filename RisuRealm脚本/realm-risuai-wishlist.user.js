@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.1.0
+// @version      1.1.1
+// @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
 // @icon         https://realm.risuai.net/favicon.ico
