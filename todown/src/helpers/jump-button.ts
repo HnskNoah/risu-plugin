@@ -12,6 +12,8 @@ const DEFAULT_LEFT = 14
 const INPUT_HEIGHT_MULTIPLIER = 1.2
 const FALLBACK_INPUT_HEIGHT = 56
 const POSITION_STORAGE_KEY = "todown-position"
+const POSITION_STORAGE_KEY_MOBILE = "todown-position-mobile"
+const MOBILE_BREAKPOINT = 768
 
 const CHAT_SCREEN_SELECTORS = [".default-chat-screen"] as const
 const CHAT_BODY_SELECTOR = ".default-chat-screen > div.flex.flex-col-reverse"
@@ -130,10 +132,15 @@ const measureInputHeight = async (doc: SafeDocument): Promise<number> => {
   return FALLBACK_INPUT_HEIGHT
 }
 
-const loadPosition = async (): Promise<StoredPosition | null> => {
+const isMobileViewport = async (body: SafeElement): Promise<boolean> => {
+  const width = await body.clientWidth()
+  return width <= MOBILE_BREAKPOINT
+}
+
+const loadPosition = async (key: string): Promise<StoredPosition | null> => {
   try {
     const storage = await risuai.getLocalPluginStorage()
-    const stored = await storage.getItem<StoredPosition>(POSITION_STORAGE_KEY)
+    const stored = await storage.getItem<StoredPosition>(key)
     if (
       stored === null ||
       typeof stored !== "object" ||
@@ -152,10 +159,10 @@ const loadPosition = async (): Promise<StoredPosition | null> => {
   }
 }
 
-const savePosition = async (position: StoredPosition): Promise<void> => {
+const savePosition = async (key: string, position: StoredPosition): Promise<void> => {
   try {
     const storage = await risuai.getLocalPluginStorage()
-    await storage.setItem(POSITION_STORAGE_KEY, position)
+    await storage.setItem(key, position)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`[${PLUGIN_DISPLAY_NAME}] failed to save position: ${message}`)
@@ -229,7 +236,10 @@ export const createJumpButton = async (): Promise<void> => {
   const inputHeight = await measureInputHeight(doc)
   let posX = DEFAULT_LEFT
   let posY = Math.round(inputHeight * INPUT_HEIGHT_MULTIPLIER)
-  const storedPosition = await loadPosition()
+  const positionKey = (await isMobileViewport(body))
+    ? POSITION_STORAGE_KEY_MOBILE
+    : POSITION_STORAGE_KEY
+  const storedPosition = await loadPosition(positionKey)
   if (storedPosition !== null) {
     const clamped = await clampToViewport(storedPosition.x, storedPosition.y)
     posX = clamped.x
@@ -397,7 +407,10 @@ export const createJumpButton = async (): Promise<void> => {
       }
       dragging = false
       if (suppressClick) {
-        await savePosition({ x: posX, y: posY })
+        const key = (await isMobileViewport(body))
+          ? POSITION_STORAGE_KEY_MOBILE
+          : POSITION_STORAGE_KEY
+        await savePosition(key, { x: posX, y: posY })
       }
     })()
   })
