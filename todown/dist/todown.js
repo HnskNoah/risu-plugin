@@ -3,7 +3,7 @@
 //@api 3.0
 //@version 1.0.0
 //@description Always-visible jump-to-latest button for RISU AI
-//@link https://unpkg.com/todown@1.0.0/dist/todown.js
+//@link https://github.com/HnskNoah/risu-plugin/blob/main/todown/dist/todown.js
 var s = "todown", u = "todown-jump-button", L = "todown-at-bottom", B = "todown-pending", st = 100, lt = 80, ct = 300, ut = 5, q = 48, wt = 14, dt = 1.2, ft = 56, mt = "todown-position", vt = "todown-position-mobile", pt = 768, yt = 4e3, ht = 100, gt = 100, J = "todown-activate", W = "2026-08-main-dom-v1", A = "todown-main-dom-permission-version", Tt = ".default-chat-screen", bt = ".default-chat-screen > div.flex.flex-col-reverse", St = ".default-chat-screen .risu-chat", _t = [
   ".default-chat-screen textarea",
   ".default-chat-screen [contenteditable]",
