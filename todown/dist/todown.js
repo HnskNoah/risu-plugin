@@ -4,11 +4,11 @@
 //@version 1.0.0
 //@description Always-visible jump-to-latest button for RISU AI
 //@link https://unpkg.com/todown@1.0.0/dist/todown.js
-var h = "todown", s = "todown-jump-button", x = "todown-at-bottom", E = "todown-pending", K = 8, j = 80, V = 300, W = 5, P = 48, z = 14, J = 1.2, Q = 56, Z = "todown-position", tt = "todown-position-mobile", et = 768, at = ".default-chat-screen", it = ".default-chat-screen > div.flex.flex-col-reverse", nt = ".default-chat-screen .risu-chat", rt = [
+var s = "todown", u = "todown-jump-button", L = "todown-at-bottom", B = "todown-pending", st = 100, lt = 80, ct = 300, ut = 5, q = 48, wt = 14, dt = 1.2, ft = 56, mt = "todown-position", vt = "todown-position-mobile", pt = 768, yt = 4e3, ht = 100, gt = 100, J = "todown-activate", W = "2026-08-main-dom-v1", A = "todown-main-dom-permission-version", Tt = ".default-chat-screen", bt = ".default-chat-screen > div.flex.flex-col-reverse", St = ".default-chat-screen .risu-chat", _t = [
   ".default-chat-screen textarea",
   ".default-chat-screen [contenteditable]",
   ".default-chat-screen input[type='text']"
-], U = "x-todown-jump", ot = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>', st = `.${s} {
+], F = "x-todown-jump", Q = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>', Et = `.${u} {
   position: fixed;
   left: 14px;
   bottom: 67px;
@@ -30,191 +30,260 @@ var h = "todown", s = "todown-jump-button", x = "todown-at-bottom", E = "todown-
   opacity: 1;
   transition: opacity 0.18s ease;
 }
-.${s}:hover {
+.${u}:hover {
   background: rgba(39, 39, 42, 0.92);
 }
-.${s}:active {
+.${u}:active {
   cursor: grabbing;
 }
-.${s}.${x} {
+.${u}.${L} {
   opacity: 0.4;
 }
-.${s}.${E} {
+.${u}.${B} {
   opacity: 0.25;
 }
 @media (max-width: 768px) {
-  .${s} {
+  .${u} {
     width: 48px;
     height: 48px;
     left: 10px;
     bottom: calc(12px + env(safe-area-inset-bottom));
   }
-}`, k = (a, i, n) => Math.min(Math.max(a, i), Math.max(i, n)), Y = async (a) => ({
-  chatBody: await a.querySelector(it),
-  first: await a.querySelector(nt)
-}), lt = async (a) => {
-  for (const i of rt) {
-    const n = await a.querySelector(i);
-    if (n === null) continue;
-    const l = await n.getBoundingClientRect();
-    if (l.height > 0) return l.height;
+}`, K = (t, a, i) => Math.min(Math.max(t, a), Math.max(a, i)), V = async (t) => ({
+  chatBody: await t.querySelector(bt),
+  first: await t.querySelector(St)
+}), Ot = async (t) => {
+  for (const a of _t) {
+    const i = await t.querySelector(a);
+    if (i === null) continue;
+    const n = await i.getBoundingClientRect();
+    if (n.height > 0) return n.height;
   }
-  return Q;
-}, L = (a) => a instanceof Error ? a.message : String(a), ct = async (a) => await a.clientWidth() <= et, ut = async (a) => {
+  return ft;
+}, c = (t) => t instanceof Error ? t.message : String(t), Z = (t) => new Promise((a) => setTimeout(a, t)), xt = async () => {
   try {
-    const i = await (await risuai.getLocalPluginStorage()).getItem(a);
-    return i === null || typeof i != "object" || typeof i.x != "number" || typeof i.y != "number" || !Number.isFinite(i.x) || !Number.isFinite(i.y) ? null : {
-      x: i.x,
-      y: i.y
+    return await risuai.getRootDocument();
+  } catch (t) {
+    return console.error(`[${s}] failed to get root document: ${c(t)}`), null;
+  }
+}, It = async (t) => {
+  for (let a = 0; a < gt; a += 1) {
+    const i = await t.querySelector("body");
+    if (i !== null) return i;
+    await Z(ht);
+  }
+  return null;
+}, Mt = async (t) => await t.clientWidth() <= pt, Lt = async (t) => {
+  try {
+    const a = await (await risuai.getLocalPluginStorage()).getItem(t);
+    return a === null || typeof a != "object" || typeof a.x != "number" || typeof a.y != "number" || !Number.isFinite(a.x) || !Number.isFinite(a.y) ? null : {
+      x: a.x,
+      y: a.y
     };
-  } catch (i) {
-    return console.error(`[${h}] failed to load position: ${L(i)}`), null;
+  } catch (a) {
+    return console.error(`[${s}] failed to load position: ${c(a)}`), null;
   }
-}, dt = async (a, i) => {
+}, Bt = async (t, a) => {
   try {
-    await (await risuai.getLocalPluginStorage()).setItem(a, i);
-  } catch (n) {
-    console.error(`[${h}] failed to save position: ${L(n)}`);
+    await (await risuai.getLocalPluginStorage()).setItem(t, a);
+  } catch (i) {
+    console.error(`[${s}] failed to save position: ${c(i)}`);
   }
-}, wt = async () => {
-  const a = await risuai.getRootDocument();
-  if (a === null) {
-    console.error(`[${h}] main document access denied or unavailable; grant permission and reload`);
-    return;
+}, Rt = async () => {
+  try {
+    return await (await risuai.getLocalPluginStorage()).getItem(A) === W;
+  } catch (t) {
+    return console.error(`[${s}] failed to load main DOM permission marker: ${c(t)}`), !1;
   }
-  if (await a.querySelector(`[${U}]`) !== null) return;
-  const i = await a.querySelector("body");
-  if (i === null) throw new Error("main document body not found");
+}, j = async () => {
+  try {
+    await (await risuai.getLocalPluginStorage()).setItem(A, W);
+  } catch (t) {
+    console.error(`[${s}] failed to save main DOM permission marker: ${c(t)}`);
+  }
+}, R = async () => {
+  try {
+    await (await risuai.getLocalPluginStorage()).removeItem(A);
+  } catch (t) {
+    console.error(`[${s}] failed to clear main DOM permission marker: ${c(t)}`);
+  }
+}, y = null, g = !1, T = null, b = !1, At = async (t) => {
+  const a = await xt();
+  if (a === null)
+    return console.error(`[${s}] main document access denied or unavailable; use the ToDown button after the page finishes loading`), t === "auto" && await R(), !1;
+  if (await a.querySelector(`[${F}]`) !== null)
+    return g = !0, await j(), !0;
+  const i = await It(a);
+  if (i === null)
+    throw t === "auto" && await R(), new Error("main document body not found after waiting");
   const n = await a.createElement("button");
-  await n.addClass(s), await n.setAttribute(U, "1"), await n.setInnerHTML(ot);
-  const l = await a.createElement("style");
-  await l.setTextContent(st), await i.appendChild(l), await i.appendChild(n), await (await risuai.createMutationObserver(() => {
-    F(!0);
+  await n.addClass(u), await n.setAttribute(F, "1"), await n.setInnerHTML(Q);
+  const S = await a.createElement("style");
+  await S.setTextContent(Et), await i.appendChild(S), await i.appendChild(n), await (await risuai.createMutationObserver(() => {
+    ot(!0);
   })).observe(i, {
     childList: !0,
     subtree: !0
   });
-  let m = [];
-  const _ = [];
-  let v = !1, g = !1, b = !1, O = 0, y = null;
-  const C = async (e, t) => {
-    const r = await i.clientWidth(), o = await i.clientHeight();
+  let _ = [];
+  const $ = [];
+  let E = !1, O = !1, x = !1, C = 0, h = null;
+  const N = async (e, r) => {
+    const o = await i.clientWidth(), l = await i.clientHeight();
     return {
-      x: k(e, 0, Math.max(0, r - P)),
-      y: k(t, 0, Math.max(0, o - P))
+      x: K(e, 0, Math.max(0, o - q)),
+      y: K(r, 0, Math.max(0, l - q))
     };
-  }, D = await lt(a);
-  let d = z, w = Math.round(D * J);
-  const B = async () => await ct(i) ? tt : Z, T = await ut(await B());
-  if (T !== null) {
-    const e = await C(T.x, T.y);
-    d = e.x, w = e.y;
+  }, at = await Ot(a);
+  let f = wt, m = Math.round(at * dt);
+  const D = async () => await Mt(i) ? vt : mt, I = await Lt(await D());
+  if (I !== null) {
+    const e = await N(I.x, I.y);
+    f = e.x, m = e.y;
   }
-  const I = async () => {
-    await n.setStyle("left", `${d}px`), await n.setStyle("bottom", `${w}px`);
+  const P = async () => {
+    await n.setStyle("left", `${f}px`), await n.setStyle("bottom", `${m}px`);
   };
-  await I();
-  const S = async (e) => {
-    for (const t of e) await t.element.removeEventListener(t.type, t.id).catch(() => {
+  await P();
+  const M = async (e) => {
+    for (const r of e) await r.element.removeEventListener(r.type, r.id).catch(() => {
     });
     e.length = 0;
-  }, f = async (e, t) => {
-    const r = await n.addEventListener(e, t);
-    _.push({
+  }, v = async (e, r) => {
+    const o = await n.addEventListener(e, r);
+    $.push({
       element: n,
       type: e,
-      id: r
+      id: o
     });
-  }, X = async (e) => {
-    await S(m);
-    for (const t of e) {
-      const r = await t.addEventListener("scroll", q);
-      m.push({
-        element: t,
+  }, rt = async (e) => {
+    await M(_);
+    for (const r of e) {
+      const o = await r.addEventListener("scroll", nt);
+      _.push({
+        element: r,
         type: "scroll",
-        id: r
+        id: o
       });
     }
-  }, G = async (e, t) => {
-    if (e !== null && t.first !== null) {
-      const r = await e.getBoundingClientRect();
-      let o = (await t.first.getBoundingClientRect()).bottom >= r.bottom - K;
-      !o && t.chatBody !== null && (o = await t.chatBody.clientHeight() <= await e.clientHeight()), o !== v && (o ? await n.addClass(x) : await n.removeClass(x), v = o), await n.removeClass(E);
+  }, it = async (e, r) => {
+    if (e !== null && r.first !== null) {
+      const o = await e.getBoundingClientRect();
+      let l = (await r.first.getBoundingClientRect()).top <= o.bottom + st;
+      !l && r.chatBody !== null && (l = await r.chatBody.clientHeight() <= await e.clientHeight()), l !== E && (l ? await n.addClass(L) : await n.removeClass(L), E = l), await n.removeClass(B);
     } else
-      v = !1, await n.addClass(E);
+      E = !1, await n.addClass(B);
   }, p = async (e) => {
-    if (g) {
-      b = !0;
+    if (O) {
+      x = !0;
       return;
     }
-    g = !0;
+    O = !0;
     try {
-      const t = await a.querySelector(at), r = await Y(a);
-      e && await X(t === null ? [] : [t]), await G(t, r);
-    } catch (t) {
-      console.error(`[${h}] refresh failed: ${L(t)}`);
+      const r = await a.querySelector(Tt), o = await V(a);
+      e && await rt(r === null ? [] : [r]), await it(r, o);
+    } catch (r) {
+      console.error(`[${s}] refresh failed: ${c(r)}`);
     } finally {
-      g = !1, b && (b = !1, p(!0));
+      O = !1, x && (x = !1, p(!0));
     }
-  }, q = () => {
+  }, nt = () => {
     const e = Date.now();
-    e - O < j || (O = e, p(!1));
-  }, F = (e) => {
-    y !== null && clearTimeout(y), y = setTimeout(() => {
-      y = null, p(e);
-    }, V);
-  }, M = async (e) => {
-    const t = e;
-    if (typeof t.clientX != "number" || typeof t.clientY != "number") return !1;
-    const r = await n.getBoundingClientRect();
-    return t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom;
+    e - C < lt || (C = e, p(!1));
+  }, ot = (e) => {
+    h !== null && clearTimeout(h), h = setTimeout(() => {
+      h = null, p(e);
+    }, ct);
+  }, H = async (e) => {
+    const r = e;
+    if (typeof r.clientX != "number" || typeof r.clientY != "number") return !1;
+    const o = await n.getBoundingClientRect();
+    return r.clientX >= o.left && r.clientX <= o.right && r.clientY >= o.top && r.clientY <= o.bottom;
   };
-  let c = !1, u = !1, R = 0, A = 0, N = 0, $ = 0;
-  await f("pointerdown", (e) => {
+  T = async () => {
+    const e = await V(a);
+    e.first !== null && (await e.first.scrollIntoView({
+      behavior: "instant",
+      block: "start"
+    }), await p(!0));
+  };
+  let w = !1, d = !1, Y = 0, U = 0, k = 0, X = 0;
+  return await v("pointerdown", (e) => {
     (async () => {
-      if (!await M(e)) return;
-      const t = e;
-      c = !0, u = !1, R = t.clientX, A = t.clientY, N = d, $ = w;
+      if (!await H(e)) return;
+      const r = e;
+      w = !0, d = !1, Y = r.clientX, U = r.clientY, k = f, X = m;
     })();
-  }), await f("pointermove", (e) => {
+  }), await v("pointermove", (e) => {
     (async () => {
-      if (!c) return;
-      const t = e;
-      if (typeof t.clientX != "number" || typeof t.clientY != "number") return;
-      const r = t.clientX - R, o = t.clientY - A;
-      Math.abs(r) + Math.abs(o) > W && (u = !0);
-      const H = await C(N + r, $ - o);
-      d = H.x, w = H.y, await I();
+      if (!w) return;
+      const r = e;
+      if (typeof r.clientX != "number" || typeof r.clientY != "number") return;
+      const o = r.clientX - Y, l = r.clientY - U;
+      Math.abs(o) + Math.abs(l) > ut && (d = !0);
+      const G = await N(k + o, X - l);
+      f = G.x, m = G.y, await P();
     })();
-  }), await f("pointerup", (e) => {
-    (async () => c && (c = !1, u && await dt(await B(), {
-      x: d,
-      y: w
+  }), await v("pointerup", (e) => {
+    (async () => w && (w = !1, d && await Bt(await D(), {
+      x: f,
+      y: m
     })))();
-  }), await f("pointercancel", (e) => {
-    (async () => c && (c = !1, u = !1))();
-  }), await f("click", (e) => {
+  }), await v("pointercancel", (e) => {
+    (async () => w && (w = !1, d = !1))();
+  }), await v("click", (e) => {
     (async () => {
-      if (u) {
-        u = !1;
+      if (d) {
+        d = !1;
         return;
       }
-      if (!await M(e)) return;
-      const t = await Y(a);
-      t.first !== null && (await t.first.scrollIntoView({
-        behavior: "instant",
-        block: "start"
-      }), await p(!0));
+      await H(e) && await T?.();
     })();
   }), await risuai.onUnload(async () => {
-    await S(_), await S(m), await n.remove().catch(() => {
-    }), await l.remove().catch(() => {
-    });
-  }), await p(!0);
+    await M($), await M(_), await n.remove().catch(() => {
+    }), await S.remove().catch(() => {
+    }), g = !1, T = null;
+  }), await p(!0), g = !0, await j(), !0;
+}, tt = async (t) => g ? (await T?.(), !0) : (y !== null || (y = At(t).catch(async (a) => (console.error(`[${s}] activation failed: ${c(a)}`), t === "auto" && await R(), !1)).finally(() => {
+  y = null;
+})), y), z = async () => {
+  if (!b)
+    try {
+      await risuai.registerButton({
+        name: "ToDown",
+        icon: Q,
+        iconType: "html",
+        location: "action",
+        id: J
+      }, () => {
+        (async () => await tt("manual") && await et())();
+      }), b = !0;
+    } catch (t) {
+      console.error(`[${s}] failed to register activation button: ${c(t)}`);
+    }
+}, et = async () => {
+  if (b)
+    try {
+      await risuai.unregisterUIPart(J), b = !1;
+    } catch (t) {
+      console.error(`[${s}] failed to unregister activation button: ${c(t)}`);
+    }
+}, $t = async () => {
+  if (!await Rt()) {
+    await z();
+    return;
+  }
+  (async () => {
+    if (await Z(yt), await tt("auto")) {
+      await et();
+      return;
+    }
+    await z();
+  })();
 };
 try {
-  await wt();
-} catch (a) {
-  const i = a instanceof Error ? a.message : "Unknown error";
-  console.error(`[${h}] initialization failed: ${i}`);
+  await $t();
+} catch (t) {
+  const a = t instanceof Error ? t.message : "Unknown error";
+  console.error(`[${s}] initialization failed: ${a}`);
 }

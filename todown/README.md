@@ -26,7 +26,6 @@ npm run typecheck
 - Requires the default chat screen (`.default-chat-screen`); other chat screen variants aren't supported.
 - The plugin injects its button into Risuai's main document. If the main document is unavailable, the button stays hidden and nothing is broken.
 - On re-import the plugin self-cleans: duplicate button injection is prevented and DOM is removed on unload.
-- Clicking the button logs `[todown] jump button clicked at (x, y)` to the console.
 
 ## Files
 

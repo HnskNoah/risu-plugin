@@ -3,7 +3,7 @@ import { PLUGIN_DISPLAY_NAME } from "../constants/plugin"
 const BUTTON_CLASS = "todown-jump-button"
 const AT_BOTTOM_CLASS = "todown-at-bottom"
 const PENDING_CLASS = "todown-pending"
-const BOTTOM_EPSILON = 8
+const AT_BOTTOM_THRESHOLD_PX = 100
 const SCROLL_THROTTLE_MS = 80
 const MUTATION_DEBOUNCE_MS = 300
 const DRAG_THRESHOLD = 5
@@ -14,6 +14,12 @@ const FALLBACK_INPUT_HEIGHT = 56
 const POSITION_STORAGE_KEY = "todown-position"
 const POSITION_STORAGE_KEY_MOBILE = "todown-position-mobile"
 const MOBILE_BREAKPOINT = 768
+const AUTO_START_DELAY_MS = 4000
+const BODY_RETRY_MS = 100
+const BODY_RETRY_LIMIT = 100
+const ACTIVATION_BUTTON_ID = "todown-activate"
+const MAIN_DOM_PERMISSION_VERSION = "2026-08-main-dom-v1"
+const MAIN_DOM_PERMISSION_VERSION_KEY = "todown-main-dom-permission-version"
 
 const CHAT_SCREEN_SELECTOR = ".default-chat-screen"
 const CHAT_BODY_SELECTOR = ".default-chat-screen > div.flex.flex-col-reverse"
@@ -87,6 +93,8 @@ type StoredPosition = {
   readonly y: number
 }
 
+type ActivationSource = "manual" | "auto"
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), Math.max(min, max))
 
@@ -112,6 +120,29 @@ const measureInputHeight = async (doc: SafeDocument): Promise<number> => {
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+const getRootDocumentOnce = async (): Promise<SafeDocument | null> => {
+  try {
+    return await risuai.getRootDocument()
+  } catch (error) {
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to get root document: ${errorMessage(error)}`)
+    return null
+  }
+}
+
+const waitForBody = async (doc: SafeDocument): Promise<SafeElement | null> => {
+  for (let attempt = 0; attempt < BODY_RETRY_LIMIT; attempt += 1) {
+    const body = await doc.querySelector("body")
+    if (body !== null) {
+      return body
+    }
+    await sleep(BODY_RETRY_MS)
+  }
+  return null
+}
 
 const isMobileViewport = async (body: SafeElement): Promise<boolean> => {
   const width = await body.clientWidth()
@@ -148,22 +179,63 @@ const savePosition = async (key: string, position: StoredPosition): Promise<void
   }
 }
 
-export const createJumpButton = async (): Promise<void> => {
-  const doc = await risuai.getRootDocument()
+const hasRememberedMainDomAccess = async (): Promise<boolean> => {
+  try {
+    const storage = await risuai.getLocalPluginStorage()
+    return (await storage.getItem<string>(MAIN_DOM_PERMISSION_VERSION_KEY)) === MAIN_DOM_PERMISSION_VERSION
+  } catch (error) {
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to load main DOM permission marker: ${errorMessage(error)}`)
+    return false
+  }
+}
+
+const rememberMainDomAccess = async (): Promise<void> => {
+  try {
+    const storage = await risuai.getLocalPluginStorage()
+    await storage.setItem(MAIN_DOM_PERMISSION_VERSION_KEY, MAIN_DOM_PERMISSION_VERSION)
+  } catch (error) {
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to save main DOM permission marker: ${errorMessage(error)}`)
+  }
+}
+
+const forgetMainDomAccess = async (): Promise<void> => {
+  try {
+    const storage = await risuai.getLocalPluginStorage()
+    await storage.removeItem(MAIN_DOM_PERMISSION_VERSION_KEY)
+  } catch (error) {
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to clear main DOM permission marker: ${errorMessage(error)}`)
+  }
+}
+
+let mountPromise: Promise<boolean> | null = null
+let mounted = false
+let jumpToLatest: (() => Promise<void>) | null = null
+let activationButtonRegistered = false
+
+const mountJumpButton = async (source: ActivationSource): Promise<boolean> => {
+  const doc = await getRootDocumentOnce()
   if (doc === null) {
     console.error(
-      `[${PLUGIN_DISPLAY_NAME}] main document access denied or unavailable; grant permission and reload`,
+      `[${PLUGIN_DISPLAY_NAME}] main document access denied or unavailable; use the ToDown button after the page finishes loading`,
     )
-    return
+    if (source === "auto") {
+      await forgetMainDomAccess()
+    }
+    return false
   }
   const existing = await doc.querySelector(`[${BUTTON_MARKER}]`)
   if (existing !== null) {
-    return
+    mounted = true
+    await rememberMainDomAccess()
+    return true
   }
 
-  const body = await doc.querySelector("body")
+  const body = await waitForBody(doc)
   if (body === null) {
-    throw new Error("main document body not found")
+    if (source === "auto") {
+      await forgetMainDomAccess()
+    }
+    throw new Error("main document body not found after waiting")
   }
 
   const button = await doc.createElement("button")
@@ -249,7 +321,7 @@ export const createJumpButton = async (): Promise<void> => {
     if (screen !== null && messages.first !== null) {
       const screenRect = await screen.getBoundingClientRect()
       const firstRect = await messages.first.getBoundingClientRect()
-      let atBottom = firstRect.bottom >= screenRect.bottom - BOTTOM_EPSILON
+      let atBottom = firstRect.top <= screenRect.bottom + AT_BOTTOM_THRESHOLD_PX
       if (!atBottom && messages.chatBody !== null) {
         const chatBodyHeight = await messages.chatBody.clientHeight()
         const screenHeight = await screen.clientHeight()
@@ -328,6 +400,15 @@ export const createJumpButton = async (): Promise<void> => {
     )
   }
 
+  jumpToLatest = async (): Promise<void> => {
+    const messages = await queryMessages(doc)
+    if (messages.first === null) {
+      return
+    }
+    await messages.first.scrollIntoView({ behavior: "instant", block: "start" })
+    await doRefresh(true)
+  }
+
   let dragging = false
   let suppressClick = false
   let dragStartX = 0
@@ -402,12 +483,7 @@ export const createJumpButton = async (): Promise<void> => {
       if (!(await isInsideButton(event))) {
         return
       }
-      const messages = await queryMessages(doc)
-      if (messages.first === null) {
-        return
-      }
-      await messages.first.scrollIntoView({ behavior: "instant", block: "start" })
-      await doRefresh(true)
+      await jumpToLatest?.()
     })()
   })
 
@@ -416,7 +492,99 @@ export const createJumpButton = async (): Promise<void> => {
     await unwireListeners(listeners)
     await button.remove().catch(() => undefined)
     await styleElement.remove().catch(() => undefined)
+    mounted = false
+    jumpToLatest = null
   })
 
   await doRefresh(true)
+  mounted = true
+  await rememberMainDomAccess()
+  return true
+}
+
+const activateJumpButton = async (source: ActivationSource): Promise<boolean> => {
+  if (mounted) {
+    await jumpToLatest?.()
+    return true
+  }
+  if (mountPromise !== null) {
+    return mountPromise
+  }
+
+  mountPromise = mountJumpButton(source)
+    .catch(async (error) => {
+      console.error(`[${PLUGIN_DISPLAY_NAME}] activation failed: ${errorMessage(error)}`)
+      if (source === "auto") {
+        await forgetMainDomAccess()
+      }
+      return false
+    })
+    .finally(() => {
+      mountPromise = null
+    })
+  return mountPromise
+}
+
+const registerActivationButton = async (): Promise<void> => {
+  if (activationButtonRegistered) {
+    return
+  }
+  try {
+    await risuai.registerButton(
+      {
+        name: "ToDown",
+        icon: BUTTON_HTML,
+        iconType: "html",
+        location: "action",
+        id: ACTIVATION_BUTTON_ID,
+      },
+      () => {
+        void (async () => {
+          const activated = await activateJumpButton("manual")
+          if (activated) {
+            await unregisterActivationButton()
+          }
+        })()
+      },
+    )
+    activationButtonRegistered = true
+  } catch (error) {
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to register activation button: ${errorMessage(error)}`)
+  }
+}
+
+const unregisterActivationButton = async (): Promise<void> => {
+  if (!activationButtonRegistered) {
+    return
+  }
+  try {
+    await risuai.unregisterUIPart(ACTIVATION_BUTTON_ID)
+    activationButtonRegistered = false
+  } catch (error) {
+    console.error(`[${PLUGIN_DISPLAY_NAME}] failed to unregister activation button: ${errorMessage(error)}`)
+  }
+}
+
+export const initializeJumpButton = async (): Promise<void> => {
+  if (!(await hasRememberedMainDomAccess())) {
+    await registerActivationButton()
+    return
+  }
+
+  void (async () => {
+    await sleep(AUTO_START_DELAY_MS)
+    const activated = await activateJumpButton("auto")
+    if (activated) {
+      await unregisterActivationButton()
+      return
+    }
+    await registerActivationButton()
+  })()
+}
+
+export const createJumpButton = async (): Promise<void> => {
+  const activated = await activateJumpButton("manual")
+  if (activated) {
+    await unregisterActivationButton()
+  }
 }

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Always-visible jump-to-latest button for RISU AI",
   "type": "module",
-  "main": "dist/risu-plugin-template.js",
+  "main": "dist/todown.js",
   "browser": "dist/todown.js",
   "unpkg": "dist/todown.js",
   "files": [
