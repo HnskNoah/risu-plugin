@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.3.2
+// @version      1.4.1
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -218,6 +218,47 @@
       color: #fff;
     }
 
+    .rrw-filterbar {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .rrw-selectbar,
+    .rrw-tag-modes {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .rrw-selected-count {
+      color: rgba(255, 255, 255, 0.68);
+      font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin-left: auto;
+    }
+
+    .rrw-tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 78px;
+      overflow: auto;
+    }
+
+    .rrw-tag {
+      border-radius: 999px !important;
+      font-size: 12px !important;
+      padding: 5px 8px !important;
+    }
+
+    .rrw-tag[aria-pressed="true"],
+    .rrw-tag-mode[aria-pressed="true"] {
+      background: #f43f5e;
+      border-color: #fb7185;
+      color: #fff;
+    }
+
     .rrw-list {
       display: grid;
       gap: 8px;
@@ -266,9 +307,15 @@
       color: inherit;
       display: grid;
       gap: 10px;
-      grid-template-columns: 54px minmax(0, 1fr) auto;
+      grid-template-columns: 24px 54px minmax(0, 1fr) auto;
       padding: 8px;
       text-decoration: none;
+    }
+
+    .rrw-item-check {
+      accent-color: #f43f5e;
+      height: 16px;
+      width: 16px;
     }
 
     .rrw-item img {
@@ -298,6 +345,15 @@
       color: rgba(255, 255, 255, 0.68);
       font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin-top: 3px;
+    }
+
+    .rrw-item-tags {
+      color: rgba(255, 255, 255, 0.52);
+      font: 11px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .rrw-remove {
@@ -333,6 +389,9 @@
   let state = normalizeStore(readStore());
   let filterEnabled = false;
   let panelFilter = 'character';
+  let tagFilterMode = 'any';
+  const selectedPaths = new Set();
+  const selectedTags = new Set();
   let toolbar;
   let panel;
   let detailButton;
@@ -376,6 +435,11 @@
 
   function writeStore(nextState) {
     state = normalizeStore(nextState);
+    persistStore();
+    refreshAll();
+  }
+
+  function persistStore() {
     const raw = JSON.stringify(state);
 
     try {
@@ -391,8 +455,6 @@
         console.error('[RisuRealm Wishlist] Failed to save wishlist', error);
       }
     }
-
-    refreshAll();
   }
 
   function normalizeStore(raw) {
@@ -406,11 +468,34 @@
       }
     }
 
-    const items = parsed && typeof parsed === 'object' && parsed.items && typeof parsed.items === 'object'
+    const rawItems = parsed && typeof parsed === 'object' && parsed.items && typeof parsed.items === 'object'
       ? parsed.items
       : {};
+    const items = {};
+
+    Object.entries(rawItems).forEach(([path, item]) => {
+      if (!item || typeof item !== 'object') return;
+      items[path] = { ...item, tags: normalizeTags(item.tags || []) };
+    });
 
     return { version: 1, items };
+  }
+
+  function normalizeTags(tags) {
+    const seen = new Set();
+    return (Array.isArray(tags) ? tags : [])
+      .map((tag) => String(tag || '').trim())
+      .filter((tag) => {
+        const key = tag.toLowerCase();
+        if (!tag || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 60);
+  }
+
+  function tagKey(tag) {
+    return String(tag || '').trim().toLowerCase();
   }
 
   function canonicalPath(href) {
@@ -425,6 +510,11 @@
   function typeFromPath(path) {
     const match = path.match(/^\/([^/]+)\//);
     return match ? match[1] : 'item';
+  }
+
+  function idFromPath(path) {
+    const match = String(path || '').match(/\/(?:character|preset|module)\/([^/?#]+)/);
+    return match ? match[1] : '';
   }
 
   function currentDetailPath() {
@@ -475,6 +565,7 @@
       author,
       image,
       path,
+      tags: extractTags(card, title, author),
       title,
       type: detectCurrentPageType(path),
       url: new URL(path, location.origin).href,
@@ -495,16 +586,60 @@
     const authorLine = lines.find((line) => /^By\s+/i.test(line)) || '';
     const author = authorLine.replace(/^By\s+/i, '').trim();
     const image = findBestPageImage(title);
+    const container = findDetailCardContainer();
+    const download = findDownloadLink(container || document);
 
     return {
       addedAt: state.items[path] ? state.items[path].addedAt : new Date().toISOString(),
       author,
+      downloadName: download.name,
+      downloadType: download.type,
+      downloadUrl: download.url,
       image,
       path,
+      tags: extractTags(container || document.body, title, author),
       title,
       type: detectCurrentPageType(path),
       url: new URL(path, location.origin).href,
     };
+  }
+
+  function findDownloadLink(root) {
+    const link = root && root.querySelector ? root.querySelector('a[href*="/api/v1/download/"]') : null;
+    if (!link) return { name: '', type: '', url: '' };
+    const url = new URL(link.getAttribute('href'), location.origin).href;
+    return {
+      name: link.getAttribute('download') || '',
+      type: downloadTypeFromUrl(url),
+      url,
+    };
+  }
+
+  function downloadTypeFromUrl(url) {
+    if (url.includes('/charx-v3/')) return 'charx';
+    if (url.includes('/png-v3/')) return 'normal';
+    if (url.includes('/preset-risu-v1/')) return 'preset';
+    if (url.includes('/module-v1/')) return 'module';
+    return '';
+  }
+
+  function extractTags(root, title, author) {
+    const ignored = new Set([title, author, `By ${author}`, '♡', '♥', 'No creator comments'].filter(Boolean));
+    const lines = (root && root.innerText ? root.innerText : '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return normalizeTags(lines.filter((line) => isTagLine(line, ignored)));
+  }
+
+  function isTagLine(line, ignored) {
+    if (ignored.has(line)) return false;
+    if (line.length > 40 || /\s/.test(line)) return false;
+    if (/^By\s+/i.test(line) || /^https?:\/\//i.test(line)) return false;
+    if (/^[\d.,kKmM]+$/.test(line)) return false;
+    if (/[()[\]{}<>`"“”]/.test(line)) return false;
+    return /^[\p{L}\p{N}_+#&.'-]+$/u.test(line);
   }
 
   function findBestPageImage(title) {
@@ -591,12 +726,41 @@
     const saved = Boolean(state.items[path]);
     const heart = card.querySelector('.rrw-heart');
 
+    if (saved) refreshSavedMeta(extractMeta(card));
+
     if (heart) {
       heart.textContent = saved ? '♥' : '♡';
       heart.setAttribute('aria-label', saved ? '从心愿单移除' : '加入心愿单');
       heart.setAttribute('title', saved ? '从心愿单移除' : '加入心愿单');
       heart.setAttribute('aria-pressed', String(saved));
     }
+  }
+
+  function refreshSavedMeta(meta) {
+    const current = state.items[meta.path];
+    if (!current) return;
+
+    const tags = normalizeTags([...(current.tags || []), ...(meta.tags || [])]);
+    const changed = tags.join('\n') !== itemTags(current).join('\n')
+      || (!current.image && meta.image)
+      || (!current.author && meta.author)
+      || (!current.downloadUrl && meta.downloadUrl);
+    if (!changed) return;
+
+    state.items[meta.path] = {
+      ...current,
+      author: current.author || meta.author,
+      downloadName: current.downloadName || meta.downloadName,
+      downloadType: current.downloadType || meta.downloadType,
+      downloadUrl: current.downloadUrl || meta.downloadUrl,
+      image: current.image || meta.image,
+      tags,
+      title: current.title || meta.title,
+      type: current.type || meta.type,
+      url: current.url || meta.url,
+    };
+    persistStore();
+    renderPanel();
   }
 
   function findDetailCardContainer() {
@@ -747,7 +911,9 @@
     const characterItems = items.filter((item) => wishlistGroupKey(item) === 'character');
     const presetItems = items.filter((item) => wishlistGroupKey(item) === 'preset');
     const visibleTotal = characterItems.length + presetItems.length;
-    const activeItems = panelFilter === 'preset' ? presetItems : characterItems;
+    const tabItems = panelFilter === 'preset' ? presetItems : characterItems;
+    const activeItems = tabItems.filter(matchesTagFilter);
+    const selectedCount = getSelectedItems().length;
     panel.innerHTML = '';
 
     const header = document.createElement('div');
@@ -765,13 +931,27 @@
     clearButton.textContent = '清空';
     clearButton.addEventListener('click', () => {
       if (!items.length) return;
-      if (confirm('确定清空 RisuRealm 心愿单吗？')) writeStore({ version: 1, items: {} });
+      if (confirm('确定清空 RisuRealm 心愿单吗？')) {
+        selectedPaths.clear();
+        selectedTags.clear();
+        writeStore({ version: 1, items: {} });
+      }
     });
 
     const exportButton = document.createElement('button');
     exportButton.type = 'button';
-    exportButton.textContent = '导出';
-    exportButton.addEventListener('click', exportWishlist);
+    exportButton.textContent = '导出全部';
+    exportButton.addEventListener('click', () => exportWishlist(items));
+
+    const exportSelectedButton = document.createElement('button');
+    exportSelectedButton.type = 'button';
+    exportSelectedButton.textContent = '导出所选';
+    exportSelectedButton.addEventListener('click', exportSelectedWishlist);
+
+    const downloadSelectedButton = document.createElement('button');
+    downloadSelectedButton.type = 'button';
+    downloadSelectedButton.textContent = '直接下载所选';
+    downloadSelectedButton.addEventListener('click', downloadSelectedItems);
 
     const importButton = document.createElement('button');
     importButton.type = 'button';
@@ -783,7 +963,7 @@
     closeButton.textContent = '关闭';
     closeButton.addEventListener('click', closePanel);
 
-    actions.append(importButton, exportButton, clearButton, closeButton);
+    actions.append(importButton, exportButton, exportSelectedButton, downloadSelectedButton, clearButton, closeButton);
     header.append(title, actions);
     panel.append(header);
 
@@ -794,6 +974,10 @@
       createWishlistTab('preset', `预设 (${presetItems.length})`),
     );
     panel.append(tabs);
+
+    if (visibleTotal) {
+      panel.append(createFilterBar(tabItems, activeItems, selectedCount));
+    }
 
     if (!visibleTotal) {
       const empty = document.createElement('div');
@@ -806,7 +990,9 @@
     if (!activeItems.length) {
       const empty = document.createElement('div');
       empty.className = 'rrw-empty';
-      empty.textContent = panelFilter === 'preset'
+      empty.textContent = selectedTags.size
+        ? '没有符合当前 tag 筛选的项目。'
+        : panelFilter === 'preset'
         ? '还没有加入心愿单的预设。'
         : '还没有加入心愿单的角色卡。';
       panel.append(empty);
@@ -835,9 +1021,121 @@
     return button;
   }
 
+  function createFilterBar(tabItems, activeItems, selectedCount) {
+    const bar = document.createElement('div');
+    bar.className = 'rrw-filterbar';
+
+    const selectBar = document.createElement('div');
+    selectBar.className = 'rrw-selectbar';
+
+    const allSelected = activeItems.length > 0 && activeItems.every((item) => selectedPaths.has(item.path));
+    const selectAllButton = document.createElement('button');
+    selectAllButton.type = 'button';
+    selectAllButton.textContent = allSelected ? '取消全选' : '全选当前';
+    selectAllButton.addEventListener('click', () => {
+      activeItems.forEach((item) => {
+        if (allSelected) selectedPaths.delete(item.path);
+        else selectedPaths.add(item.path);
+      });
+      renderPanel();
+    });
+
+    const clearSelectedButton = document.createElement('button');
+    clearSelectedButton.type = 'button';
+    clearSelectedButton.textContent = '清除选择';
+    clearSelectedButton.addEventListener('click', () => {
+      selectedPaths.clear();
+      renderPanel();
+    });
+
+    const count = document.createElement('span');
+    count.className = 'rrw-selected-count';
+    count.textContent = `已选 ${selectedCount}`;
+    selectBar.append(selectAllButton, clearSelectedButton, count);
+    bar.append(selectBar);
+
+    const tags = collectTags(tabItems);
+    if (!tags.length) return bar;
+
+    const modes = document.createElement('div');
+    modes.className = 'rrw-tag-modes';
+    modes.append(createTagModeButton('any', '并集'), createTagModeButton('all', '交集'));
+
+    const clearTags = document.createElement('button');
+    clearTags.type = 'button';
+    clearTags.textContent = '清除 tag';
+    clearTags.addEventListener('click', () => {
+      selectedTags.clear();
+      renderPanel();
+    });
+    modes.append(clearTags);
+
+    const tagList = document.createElement('div');
+    tagList.className = 'rrw-tag-list';
+    tags.forEach((tag) => tagList.append(createTagButton(tag)));
+    bar.append(modes, tagList);
+    return bar;
+  }
+
+  function createTagModeButton(mode, label) {
+    const button = document.createElement('button');
+    button.className = 'rrw-tag-mode';
+    button.type = 'button';
+    button.textContent = label;
+    button.setAttribute('aria-pressed', String(tagFilterMode === mode));
+    button.addEventListener('click', () => {
+      tagFilterMode = mode;
+      renderPanel();
+    });
+    return button;
+  }
+
+  function createTagButton(tag) {
+    const button = document.createElement('button');
+    const key = tagKey(tag);
+    button.className = 'rrw-tag';
+    button.type = 'button';
+    button.textContent = tag;
+    button.setAttribute('aria-pressed', String(selectedTags.has(key)));
+    button.addEventListener('click', () => {
+      if (selectedTags.has(key)) selectedTags.delete(key);
+      else selectedTags.add(key);
+      renderPanel();
+    });
+    return button;
+  }
+
+  function collectTags(items) {
+    const tags = new Map();
+    items.forEach((item) => {
+      itemTags(item).forEach((tag) => {
+        const key = tagKey(tag);
+        if (!tags.has(key)) tags.set(key, tag);
+      });
+    });
+    return Array.from(tags.values()).sort((a, b) => a.localeCompare(b));
+  }
+
+  function matchesTagFilter(item) {
+    if (!selectedTags.size) return true;
+    const tags = new Set(itemTags(item).map(tagKey));
+    if (tagFilterMode === 'all') {
+      return Array.from(selectedTags).every((tag) => tags.has(tag));
+    }
+    return Array.from(selectedTags).some((tag) => tags.has(tag));
+  }
+
+  function itemTags(item) {
+    return normalizeTags(item && item.tags);
+  }
+
+  function getSelectedItems() {
+    return Object.values(state.items).filter((item) => selectedPaths.has(item.path));
+  }
+
   function wishlistGroupKey(item) {
     const type = String(item.type || typeFromPath(item.path || '')).toLowerCase();
-    if (type === 'character') return 'character';
+    if (type === 'character' || type === 'normal' || type === 'charx') return 'character';
     if (type === 'preset') return 'preset';
     if (type === 'module' || type === 'lorebook') return 'module';
     return 'other';
@@ -847,6 +1145,22 @@
     const row = document.createElement('a');
     row.className = 'rrw-item';
     row.href = item.url || new URL(item.path, location.origin).href;
+
+    const checkbox = document.createElement('input');
+    checkbox.className = 'rrw-item-check';
+    checkbox.type = 'checkbox';
+    checkbox.checked = selectedPaths.has(item.path);
+    checkbox.title = '选择';
+    checkbox.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+    checkbox.addEventListener('change', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (checkbox.checked) selectedPaths.add(item.path);
+      else selectedPaths.delete(item.path);
+      renderPanel();
+    });
 
     const img = document.createElement('img');
     img.alt = '';
@@ -864,6 +1178,10 @@
     meta.className = 'rrw-item-meta';
     meta.textContent = item.author ? `By ${item.author}` : item.type || '';
 
+    const tags = document.createElement('div');
+    tags.className = 'rrw-item-tags';
+    tags.textContent = itemTags(item).join(' · ');
+
     const remove = document.createElement('button');
     remove.className = 'rrw-remove';
     remove.type = 'button';
@@ -875,31 +1193,118 @@
       event.stopPropagation();
       const next = { ...state, items: { ...state.items } };
       delete next.items[item.path];
+      selectedPaths.delete(item.path);
       writeStore(next);
     });
 
     main.append(itemTitle, meta);
-    row.append(img, main, remove);
+    if (tags.textContent) main.append(tags);
+    row.append(checkbox, img, main, remove);
     return row;
   }
 
-  function exportWishlist() {
+  function exportWishlist(items, name) {
+    const exportItems = (items && items.length ? items : Object.values(state.items));
     const payload = {
       exportedAt: new Date().toISOString(),
       source: 'RisuRealm Wishlist',
       version: 1,
-      items: state.items,
+      items: Object.fromEntries(exportItems.map((item) => [item.path, item])),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     const link = document.createElement('a');
     const date = new Date().toISOString().slice(0, 10);
 
     link.href = URL.createObjectURL(blob);
-    link.download = `risurealm-wishlist-${date}.json`;
+    link.download = `${name || 'risurealm-wishlist'}-${date}.json`;
     document.body.append(link);
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  function exportSelectedWishlist() {
+    const items = getSelectedItems();
+    if (!items.length) {
+      alert('请先勾选要导出的项目。');
+      return;
+    }
+    exportWishlist(items, 'risurealm-wishlist-selected');
+  }
+
+  async function downloadSelectedItems() {
+    const items = getSelectedItems();
+    if (!items.length) {
+      alert('请先勾选要下载的项目。');
+      return;
+    }
+    if (items.length > 8 && !confirm(`将直接下载 ${items.length} 个文件，浏览器可能会请求允许多个下载。继续吗？`)) return;
+
+    const failed = [];
+    for (const item of items) {
+      const ok = await downloadItem(item);
+      if (!ok) failed.push(item.title || item.path);
+    }
+    if (failed.length) alert(`以下项目未找到可用下载链接：\n${failed.slice(0, 10).join('\n')}${failed.length > 10 ? '\n...' : ''}`);
+  }
+
+  async function downloadItem(item) {
+    for (const candidate of downloadCandidates(item)) {
+      try {
+        const response = await fetch(candidate.url);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        triggerDownload(blob, candidate.name);
+        return true;
+      } catch (_) {
+        // Try next candidate.
+      }
+    }
+    return false;
+  }
+
+  function downloadCandidates(item) {
+    const id = idFromPath(item.path);
+    if (!id) return [];
+
+    const title = safeFileName(item.title || id);
+    const type = String(item.downloadType || item.type || typeFromPath(item.path)).toLowerCase();
+    const candidates = [];
+
+    if (item.downloadUrl) candidates.push({ name: item.downloadName || `${title}.download`, url: item.downloadUrl });
+    if (type === 'charx') candidates.push({ name: `${title}.charx`, url: `/api/v1/download/charx-v3/${id}` });
+    if (type === 'normal') candidates.push({ name: `${title}.png`, url: `/api/v1/download/png-v3/${id}` });
+    if (type === 'preset') candidates.push({ name: `${title}.risupreset`, url: `/api/v1/download/preset-risu-v1/${id}` });
+    if (type === 'module' || type === 'lorebook') candidates.push({ name: `${title}.json`, url: `/api/v1/download/module-v1/${id}` });
+    if (type === 'character') {
+      candidates.push(
+        { name: `${title}.charx`, url: `/api/v1/download/charx-v3/${id}` },
+        { name: `${title}.png`, url: `/api/v1/download/png-v3/${id}` },
+      );
+    }
+
+    const seen = new Set();
+    return candidates.filter((candidate) => {
+      const url = new URL(candidate.url, location.origin).href;
+      if (seen.has(url)) return false;
+      seen.add(url);
+      candidate.url = url;
+      return true;
+    });
+  }
+
+  function triggerDownload(blob, name) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  function safeFileName(name) {
+    return String(name || 'risurealm-card').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
   }
 
   function importWishlist() {
@@ -957,8 +1362,12 @@
       items[normalizedPath] = {
         addedAt: item.addedAt || new Date().toISOString(),
         author: String(item.author || ''),
+        downloadName: String(item.downloadName || ''),
+        downloadType: String(item.downloadType || ''),
+        downloadUrl: String(item.downloadUrl || ''),
         image: String(item.image || ''),
         path: normalizedPath,
+        tags: normalizeTags(item.tags || []),
         title: String(item.title || normalizedPath.split('/').pop() || 'Untitled'),
         type: item.type || typeFromPath(normalizedPath),
         url: new URL(normalizedPath, location.origin).href,
