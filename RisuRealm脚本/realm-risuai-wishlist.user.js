@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.2
+// @version      1.4.3
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -76,6 +76,15 @@
     }
 
     .rrw-card.rrw-hidden {
+      display: none !important;
+    }
+
+    html.rrw-filtering a[href^="/character/"]:not([data-rrw-saved="1"]),
+    html.rrw-filtering a[href^="/preset/"]:not([data-rrw-saved="1"]),
+    html.rrw-filtering a[href^="/module/"]:not([data-rrw-saved="1"]),
+    html.rrw-filtering a[href*="/character/"]:not([data-rrw-saved="1"]),
+    html.rrw-filtering a[href*="/preset/"]:not([data-rrw-saved="1"]),
+    html.rrw-filtering a[href*="/module/"]:not([data-rrw-saved="1"]) {
       display: none !important;
     }
 
@@ -707,6 +716,7 @@
     });
     card.classList.remove('rrw-card', 'rrw-hidden');
     delete card.dataset.rrwReady;
+    delete card.dataset.rrwSaved;
   }
 
   function stopCardOpen(event) {
@@ -732,6 +742,7 @@
     const saved = Boolean(state.items[path]);
     const heart = card.querySelector('.rrw-heart');
 
+    card.dataset.rrwSaved = saved ? '1' : '0';
     if (saved) refreshSavedMeta(extractMeta(card));
 
     if (heart) {
@@ -1397,10 +1408,7 @@
   }
 
   function applyFilter() {
-    document.querySelectorAll('a.rrw-card').forEach((card) => {
-      const path = canonicalPath(card.getAttribute('href') || card.href);
-      card.classList.toggle('rrw-hidden', filterEnabled && !state.items[path]);
-    });
+    document.documentElement.classList.toggle('rrw-filtering', filterEnabled && !currentDetailPath());
   }
 
   function scheduleScan() {
