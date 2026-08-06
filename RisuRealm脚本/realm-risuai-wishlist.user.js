@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.1
+// @version      1.4.2
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -198,10 +198,10 @@
     }
 
     .rrw-tabs {
-      display: grid;
-      gap: 8px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-bottom: 10px;
+      display: flex;
+      flex: 1 1 180px;
+      gap: 6px;
+      min-width: 180px;
     }
 
     .rrw-tab {
@@ -209,6 +209,7 @@
       font-weight: 700 !important;
       justify-content: center;
       min-width: 0;
+      padding: 8px 9px !important;
       width: 100%;
     }
 
@@ -230,6 +231,10 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+    }
+
+    .rrw-tag-modes {
+      margin-bottom: 6px;
     }
 
     .rrw-selected-count {
@@ -390,6 +395,7 @@
   let filterEnabled = false;
   let panelFilter = 'character';
   let tagFilterMode = 'any';
+  let tagExpanded = false;
   const selectedPaths = new Set();
   const selectedTags = new Set();
   let toolbar;
@@ -938,11 +944,6 @@
       }
     });
 
-    const exportButton = document.createElement('button');
-    exportButton.type = 'button';
-    exportButton.textContent = '导出全部';
-    exportButton.addEventListener('click', () => exportWishlist(items));
-
     const exportSelectedButton = document.createElement('button');
     exportSelectedButton.type = 'button';
     exportSelectedButton.textContent = '导出所选';
@@ -963,20 +964,12 @@
     closeButton.textContent = '关闭';
     closeButton.addEventListener('click', closePanel);
 
-    actions.append(importButton, exportButton, exportSelectedButton, downloadSelectedButton, clearButton, closeButton);
+    actions.append(importButton, exportSelectedButton, downloadSelectedButton, clearButton, closeButton);
     header.append(title, actions);
     panel.append(header);
 
-    const tabs = document.createElement('div');
-    tabs.className = 'rrw-tabs';
-    tabs.append(
-      createWishlistTab('character', `角色卡 (${characterItems.length})`),
-      createWishlistTab('preset', `预设 (${presetItems.length})`),
-    );
-    panel.append(tabs);
-
     if (visibleTotal) {
-      panel.append(createFilterBar(tabItems, activeItems, selectedCount));
+      panel.append(createFilterBar(characterItems, presetItems, activeItems, selectedCount));
     }
 
     if (!visibleTotal) {
@@ -1021,12 +1014,20 @@
     return button;
   }
 
-  function createFilterBar(tabItems, activeItems, selectedCount) {
+  function createFilterBar(characterItems, presetItems, activeItems, selectedCount) {
     const bar = document.createElement('div');
     bar.className = 'rrw-filterbar';
 
     const selectBar = document.createElement('div');
     selectBar.className = 'rrw-selectbar';
+    const tabItems = panelFilter === 'preset' ? presetItems : characterItems;
+
+    const tabs = document.createElement('div');
+    tabs.className = 'rrw-tabs';
+    tabs.append(
+      createWishlistTab('character', `角色卡 (${characterItems.length})`),
+      createWishlistTab('preset', `预设 (${presetItems.length})`),
+    );
 
     const allSelected = activeItems.length > 0 && activeItems.every((item) => selectedPaths.has(item.path));
     const selectAllButton = document.createElement('button');
@@ -1048,14 +1049,24 @@
       renderPanel();
     });
 
+    const tags = collectTags(tabItems);
+    const tagToggleButton = document.createElement('button');
+    tagToggleButton.type = 'button';
+    tagToggleButton.textContent = selectedTags.size ? `Tag (${selectedTags.size})` : 'Tag';
+    tagToggleButton.setAttribute('aria-expanded', String(tagExpanded));
+    tagToggleButton.setAttribute('aria-pressed', String(tagExpanded || selectedTags.size > 0));
+    tagToggleButton.addEventListener('click', () => {
+      tagExpanded = !tagExpanded;
+      renderPanel();
+    });
+
     const count = document.createElement('span');
     count.className = 'rrw-selected-count';
     count.textContent = `已选 ${selectedCount}`;
-    selectBar.append(selectAllButton, clearSelectedButton, count);
+    selectBar.append(tabs, selectAllButton, clearSelectedButton, tagToggleButton, count);
     bar.append(selectBar);
 
-    const tags = collectTags(tabItems);
-    if (!tags.length) return bar;
+    if (!tagExpanded || !tags.length) return bar;
 
     const modes = document.createElement('div');
     modes.className = 'rrw-tag-modes';
