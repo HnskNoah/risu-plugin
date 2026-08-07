@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.4
+// @version      1.4.5
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -129,15 +129,14 @@
       background: rgba(17, 24, 39, 0.9);
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 999px;
+      bottom: 18px;
       box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
       color: #fff;
       display: flex;
       gap: 6px;
-      left: calc(var(--rrw-vv-left, 0px) + var(--rrw-vv-width, 100vw) - 18px);
       padding: 7px;
       position: fixed;
-      top: calc(var(--rrw-vv-top, 0px) + var(--rrw-vv-height, 100vh) - 18px);
-      transform: translate(-100%, -100%);
+      right: 18px;
       z-index: 2147483646;
     }
 
@@ -182,9 +181,8 @@
       min-height: 260px;
       padding: 14px;
       position: fixed;
-      left: calc(var(--rrw-vv-left, 0px) + var(--rrw-vv-width, 100vw) - 18px);
-      top: calc(var(--rrw-vv-top, 0px) + 64px);
-      transform: translateX(-100%);
+      right: 18px;
+      top: 64px;
       width: 560px;
       z-index: 2147483647;
     }
@@ -380,21 +378,26 @@
     }
 
     html.rrw-mobile .rrw-panel {
-      left: calc(var(--rrw-vv-left, 0px) + 10px);
-      max-height: calc(var(--rrw-ui-height, 100vh) - 86px);
+      bottom: 72px;
+      box-sizing: border-box;
+      left: 10px;
+      max-height: 72vh;
+      max-height: calc(100dvh - 86px);
       max-width: none;
-      top: calc(var(--rrw-vv-top, 0px) + 10px);
-      transform: none;
-      width: calc(var(--rrw-ui-width, 100vw) - 20px);
+      right: auto;
+      top: auto;
+      width: calc(var(--rrw-mobile-width, 100vw) - 20px);
     }
 
     html.rrw-mobile .rrw-toolbar {
       border-radius: 16px;
+      bottom: 12px;
+      box-sizing: border-box;
       flex-wrap: wrap;
-      left: calc(var(--rrw-vv-left, 0px) + 12px);
-      max-width: calc(var(--rrw-ui-width, 100vw) - 24px);
-      top: calc(var(--rrw-vv-top, 0px) + var(--rrw-ui-height, 100vh) - 12px);
-      transform: translateY(-100%);
+      left: 12px;
+      max-width: calc(var(--rrw-mobile-width, 100vw) - 24px);
+      right: auto;
+      top: auto;
     }
 
     html.rrw-mobile .rrw-toolbar button {
@@ -445,37 +448,34 @@
   bootstrap();
 
   function bootstrap() {
-    syncViewport();
+    syncMobileClass();
     renderToolbar();
     renderDetailButton();
     scanCards();
     observePage();
     patchHistory();
-    window.addEventListener('resize', syncViewport, { passive: true });
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', syncViewport, { passive: true });
-      window.visualViewport.addEventListener('scroll', syncViewport, { passive: true });
-    }
+    window.addEventListener('resize', syncMobileClass, { passive: true });
     window.addEventListener('popstate', scheduleScan);
   }
 
-  function syncViewport() {
-    const viewport = window.visualViewport;
-    const width = viewport ? viewport.width : window.innerWidth || document.documentElement.clientWidth || 0;
-    const height = viewport ? viewport.height : window.innerHeight || document.documentElement.clientHeight || 0;
-    const uiWidth = Math.min(width || Infinity, window.innerWidth || Infinity, (window.screen && window.screen.width) || Infinity);
-    const uiHeight = Math.min(height || Infinity, window.innerHeight || Infinity, (window.screen && window.screen.height) || Infinity);
-    const left = viewport ? viewport.offsetLeft : 0;
-    const top = viewport ? viewport.offsetTop : 0;
-    const root = document.documentElement;
+  function syncMobileClass() {
+    const screenMin = Math.min(
+      (window.screen && window.screen.width) || Infinity,
+      (window.screen && window.screen.height) || Infinity
+    );
+    const screenCssMin = screenMin / Math.max(1, window.devicePixelRatio || 1);
+    const screenWidth = screenMin <= 640 ? screenMin : screenCssMin;
+    const width = Math.min(
+      window.innerWidth || Infinity,
+      document.documentElement.clientWidth || Infinity,
+      screenWidth
+    );
 
-    root.style.setProperty('--rrw-vv-left', `${Math.max(0, left)}px`);
-    root.style.setProperty('--rrw-vv-top', `${Math.max(0, top)}px`);
-    root.style.setProperty('--rrw-vv-width', `${Math.max(0, width)}px`);
-    root.style.setProperty('--rrw-vv-height', `${Math.max(0, height)}px`);
-    root.style.setProperty('--rrw-ui-width', `${Math.max(0, uiWidth === Infinity ? width : uiWidth)}px`);
-    root.style.setProperty('--rrw-ui-height', `${Math.max(0, uiHeight === Infinity ? height : uiHeight)}px`);
-    root.classList.toggle('rrw-mobile', uiWidth <= 640);
+    document.documentElement.style.setProperty(
+      '--rrw-mobile-width',
+      `${Math.max(0, width === Infinity ? screenWidth : width)}px`
+    );
+    document.documentElement.classList.toggle('rrw-mobile', width <= 640);
   }
 
   function addStyle(text) {
