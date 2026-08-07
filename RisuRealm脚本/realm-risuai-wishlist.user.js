@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.3
+// @version      1.4.4
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -129,14 +129,15 @@
       background: rgba(17, 24, 39, 0.9);
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 999px;
-      bottom: 18px;
       box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
       color: #fff;
       display: flex;
       gap: 6px;
+      left: calc(var(--rrw-vv-left, 0px) + var(--rrw-vv-width, 100vw) - 18px);
       padding: 7px;
       position: fixed;
-      right: 18px;
+      top: calc(var(--rrw-vv-top, 0px) + var(--rrw-vv-height, 100vh) - 18px);
+      transform: translate(-100%, -100%);
       z-index: 2147483646;
     }
 
@@ -181,8 +182,9 @@
       min-height: 260px;
       padding: 14px;
       position: fixed;
-      right: 18px;
-      top: 64px;
+      left: calc(var(--rrw-vv-left, 0px) + var(--rrw-vv-width, 100vw) - 18px);
+      top: calc(var(--rrw-vv-top, 0px) + 64px);
+      transform: translateX(-100%);
       width: 560px;
       z-index: 2147483647;
     }
@@ -377,24 +379,52 @@
       width: 34px;
     }
 
-    @media (max-width: 640px) {
-      .rrw-panel {
-        inset: auto 10px 72px 10px;
-        max-height: 72vh;
-        max-width: none;
-        top: auto;
-        width: auto;
-      }
+    html.rrw-mobile .rrw-panel {
+      left: calc(var(--rrw-vv-left, 0px) + 10px);
+      max-height: calc(var(--rrw-ui-height, 100vh) - 86px);
+      max-width: none;
+      top: calc(var(--rrw-vv-top, 0px) + 10px);
+      transform: none;
+      width: calc(var(--rrw-ui-width, 100vw) - 20px);
+    }
 
-      .rrw-toolbar {
-        bottom: 12px;
-        right: 12px;
-      }
+    html.rrw-mobile .rrw-toolbar {
+      border-radius: 16px;
+      flex-wrap: wrap;
+      left: calc(var(--rrw-vv-left, 0px) + 12px);
+      max-width: calc(var(--rrw-ui-width, 100vw) - 24px);
+      top: calc(var(--rrw-vv-top, 0px) + var(--rrw-ui-height, 100vh) - 12px);
+      transform: translateY(-100%);
+    }
 
-      .rrw-detail-button {
-        right: 10px;
-        top: 10px;
-      }
+    html.rrw-mobile .rrw-toolbar button {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    html.rrw-mobile .rrw-panel-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    html.rrw-mobile .rrw-panel-actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    html.rrw-mobile .rrw-item {
+      gap: 8px;
+      grid-template-columns: 24px 44px minmax(0, 1fr) 34px;
+    }
+
+    html.rrw-mobile .rrw-item img {
+      height: 44px;
+      width: 44px;
+    }
+
+    html.rrw-mobile .rrw-detail-button {
+      right: 10px;
+      top: 10px;
     }
   `;
 
@@ -415,12 +445,37 @@
   bootstrap();
 
   function bootstrap() {
+    syncViewport();
     renderToolbar();
     renderDetailButton();
     scanCards();
     observePage();
     patchHistory();
+    window.addEventListener('resize', syncViewport, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', syncViewport, { passive: true });
+      window.visualViewport.addEventListener('scroll', syncViewport, { passive: true });
+    }
     window.addEventListener('popstate', scheduleScan);
+  }
+
+  function syncViewport() {
+    const viewport = window.visualViewport;
+    const width = viewport ? viewport.width : window.innerWidth || document.documentElement.clientWidth || 0;
+    const height = viewport ? viewport.height : window.innerHeight || document.documentElement.clientHeight || 0;
+    const uiWidth = Math.min(width || Infinity, window.innerWidth || Infinity, (window.screen && window.screen.width) || Infinity);
+    const uiHeight = Math.min(height || Infinity, window.innerHeight || Infinity, (window.screen && window.screen.height) || Infinity);
+    const left = viewport ? viewport.offsetLeft : 0;
+    const top = viewport ? viewport.offsetTop : 0;
+    const root = document.documentElement;
+
+    root.style.setProperty('--rrw-vv-left', `${Math.max(0, left)}px`);
+    root.style.setProperty('--rrw-vv-top', `${Math.max(0, top)}px`);
+    root.style.setProperty('--rrw-vv-width', `${Math.max(0, width)}px`);
+    root.style.setProperty('--rrw-vv-height', `${Math.max(0, height)}px`);
+    root.style.setProperty('--rrw-ui-width', `${Math.max(0, uiWidth === Infinity ? width : uiWidth)}px`);
+    root.style.setProperty('--rrw-ui-height', `${Math.max(0, uiHeight === Infinity ? height : uiHeight)}px`);
+    root.classList.toggle('rrw-mobile', uiWidth <= 640);
   }
 
   function addStyle(text) {
