@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.1
+// @version      1.0.2
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
@@ -93,12 +93,14 @@
 
   let pager;
   let scheduled = false;
+  const FILTER_PARAMS = ['sort', 'mode', 'nsfw'];
 
   addStyle(css);
   ready(() => {
     render();
     observe();
     patchHistory();
+    document.addEventListener('click', normalizeLinkNavigation, true);
     window.addEventListener('popstate', scheduleRender);
   });
 
@@ -180,6 +182,10 @@
     return location.pathname === '/' || location.pathname === '';
   }
 
+  function isListPath(pathname) {
+    return pathname === '/' || pathname === '';
+  }
+
   function currentPage() {
     const page = Number(new URL(location.href).searchParams.get('page') || 1);
     return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -192,6 +198,34 @@
     if (!url.searchParams.has('sort')) url.searchParams.set('sort', '');
     url.searchParams.set('page', String(nextPage));
     location.href = url.href;
+  }
+
+  function normalizeListUrl(rawUrl) {
+    if (rawUrl == null) return rawUrl;
+    let url;
+    try {
+      url = new URL(rawUrl, location.href);
+    } catch (error) {
+      return rawUrl;
+    }
+    if (url.origin !== location.origin || !isListPath(url.pathname)) return rawUrl;
+
+    const current = new URL(location.href);
+    const filterChanged = FILTER_PARAMS.some((key) => (current.searchParams.get(key) || '') !== (url.searchParams.get(key) || ''));
+    if (filterChanged) url.searchParams.set('page', '1');
+    if (url.searchParams.has('page') && !url.searchParams.has('sort')) url.searchParams.set('sort', '');
+    return url.href;
+  }
+
+  function normalizeLinkNavigation(event) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = event.target && (event.target.nodeType === 1 ? event.target : event.target.parentElement);
+    const link = target && target.closest ? target.closest('a[href]') : null;
+    if (!link) return;
+    const nextUrl = normalizeListUrl(link.getAttribute('href'));
+    if (nextUrl === link.href || nextUrl === link.getAttribute('href')) return;
+    event.preventDefault();
+    location.href = nextUrl;
   }
 
   function button(text, onClick, disabled) {
@@ -238,6 +272,7 @@
     ['pushState', 'replaceState'].forEach((method) => {
       const original = history[method];
       history[method] = function patchedHistoryMethod() {
+        if (arguments.length > 2) arguments[2] = normalizeListUrl(arguments[2]);
         const result = original.apply(this, arguments);
         scheduleRender();
         return result;
