@@ -1,0 +1,191 @@
+// ==UserScript==
+// @name         RisuRealm Pagination Plus
+// @namespace    https://realm.risuai.net/
+// @version      1.0.0
+// @license      MIT
+// @description  Add quick page jump controls to RisuRealm list pagination.
+// @match        https://realm.risuai.net/*
+// @icon         https://realm.risuai.net/favicon.ico
+// @run-at       document-idle
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  'use strict';
+
+  const css = `
+    .rrp-native-hidden {
+      display: none !important;
+    }
+
+    .rrp-pager {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin: 16px auto 10px;
+      max-width: min(100%, 720px);
+      padding: 0 12px;
+    }
+
+    .rrp-pager button,
+    .rrp-pager input {
+      background: #e5e7eb;
+      border: 1px solid rgba(17, 24, 39, 0.12);
+      border-radius: 999px;
+      color: #1f2937;
+      font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 36px;
+    }
+
+    .rrp-pager button {
+      cursor: pointer;
+      padding: 0 13px;
+    }
+
+    .rrp-pager button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .rrp-pager input {
+      padding: 0 10px;
+      text-align: center;
+      width: 86px;
+    }
+
+    .rrp-page-label {
+      color: rgba(17, 24, 39, 0.72);
+      font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+  `;
+
+  let pager;
+  let scheduled = false;
+
+  addStyle(css);
+  render();
+  observe();
+  patchHistory();
+  window.addEventListener('popstate', scheduleRender);
+
+  function render() {
+    const nativePager = findNativePager();
+    if (!nativePager || !isListPage()) {
+      if (pager) pager.remove();
+      pager = null;
+      document.querySelectorAll('.rrp-native-hidden').forEach((node) => node.classList.remove('rrp-native-hidden'));
+      return;
+    }
+
+    nativePager.classList.add('rrp-native-hidden');
+    if (!pager) {
+      pager = document.createElement('form');
+      pager.className = 'rrp-pager';
+      pager.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const input = pager.querySelector('input');
+        goToPage(Number(input && input.value));
+      });
+      nativePager.insertAdjacentElement('afterend', pager);
+    } else if (pager.previousElementSibling !== nativePager) {
+      nativePager.insertAdjacentElement('afterend', pager);
+    }
+
+    const page = currentPage();
+    if (pager.dataset.rrpPage === String(page)) return;
+    pager.dataset.rrpPage = String(page);
+    pager.innerHTML = '';
+    pager.append(
+      button('首页', () => goToPage(1), page <= 1),
+      button('-10', () => goToPage(page - 10), page <= 1),
+      button('上一页', () => goToPage(page - 1), page <= 1),
+      label('第'),
+      input(page),
+      label('页'),
+      button('跳转', () => goToPage(Number(pager.querySelector('input').value))),
+      button('下一页', () => goToPage(page + 1)),
+      button('+10', () => goToPage(page + 10))
+    );
+  }
+
+  function findNativePager() {
+    return Array.from(document.querySelectorAll('div.mt-4.w-full.flex.justify-center.items-center'))
+      .find((node) => node.querySelectorAll('button').length >= 2 && /^\d+$/.test((node.textContent || '').trim()));
+  }
+
+  function isListPage() {
+    return location.pathname === '/' || location.pathname === '';
+  }
+
+  function currentPage() {
+    const page = Number(new URL(location.href).searchParams.get('page') || 1);
+    return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  }
+
+  function goToPage(page) {
+    if (!Number.isFinite(page)) return;
+    const nextPage = Math.max(1, Math.floor(page));
+    const url = new URL(location.href);
+    url.searchParams.set('page', String(nextPage));
+    location.href = url.href;
+  }
+
+  function button(text, onClick, disabled) {
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.textContent = text;
+    node.disabled = Boolean(disabled);
+    node.addEventListener('click', onClick);
+    return node;
+  }
+
+  function input(page) {
+    const node = document.createElement('input');
+    node.type = 'number';
+    node.min = '1';
+    node.step = '1';
+    node.inputMode = 'numeric';
+    node.value = String(page);
+    node.setAttribute('aria-label', '页码');
+    return node;
+  }
+
+  function label(text) {
+    const node = document.createElement('span');
+    node.className = 'rrp-page-label';
+    node.textContent = text;
+    return node;
+  }
+
+  function scheduleRender() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      render();
+    });
+  }
+
+  function observe() {
+    new MutationObserver(scheduleRender).observe(document.body, { childList: true, subtree: true });
+  }
+
+  function patchHistory() {
+    ['pushState', 'replaceState'].forEach((method) => {
+      const original = history[method];
+      history[method] = function patchedHistoryMethod() {
+        const result = original.apply(this, arguments);
+        scheduleRender();
+        return result;
+      };
+    });
+  }
+
+  function addStyle(text) {
+    const style = document.createElement('style');
+    style.textContent = text;
+    (document.head || document.documentElement).append(style);
+  }
+})();
