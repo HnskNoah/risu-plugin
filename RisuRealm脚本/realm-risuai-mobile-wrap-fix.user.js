@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Mobile Wrap Fix
 // @namespace    https://realm.risuai.net/
-// @version      1.0.1
+// @version      1.0.2
 // @license      MIT
 // @description  Prevent long RisuRealm text and links from overflowing the mobile page width.
 // @match        https://realm.risuai.net/*
@@ -22,8 +22,8 @@
         overflow-x: clip !important;
       }
 
-      body :where(article, section, div, p, li, span, a, pre, code) {
-        min-width: 0 !important;
+      body :where(p, li, a, pre, code),
+      body :where(article, section, div, span):not(:has(img, video, canvas, svg)) {
         overflow-wrap: anywhere !important;
         word-break: break-word;
       }
