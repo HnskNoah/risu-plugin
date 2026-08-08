@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.5
+// @version      1.0.6
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
@@ -103,19 +103,64 @@
       justify-content: center;
       margin-top: 2px;
     }
+
+    .rrui-scroll-controls {
+      bottom: 92px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: fixed;
+      right: 16px;
+      z-index: 9999;
+    }
+
+    .rrui-scroll-controls button {
+      align-items: center;
+      background: #f43f5e;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      font: 800 18px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 44px;
+      justify-content: center;
+      min-width: 44px;
+      padding: 0;
+      width: 44px;
+    }
+
+    .rrui-scroll-controls button[hidden],
+    .rrui-scroll-controls[hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 640px) {
+      .rrui-scroll-controls {
+        bottom: 82px;
+        right: 10px;
+      }
+    }
   `;
 
   let pager;
+  let scrollControls;
   let scheduled = false;
+  let scrollScheduled = false;
   const FILTER_PARAMS = ['sort', 'mode', 'nsfw'];
 
   addStyle(css);
   repairCurrentUrl();
   ready(() => {
     render();
+    ensureScrollControls();
+    updateScrollControls();
     observe();
     patchHistory();
     document.addEventListener('click', normalizeLinkNavigation, true);
+    window.addEventListener('scroll', scheduleScrollControls, { passive: true });
+    window.addEventListener('resize', scheduleScrollControls);
     window.addEventListener('popstate', scheduleRender);
   });
 
@@ -161,8 +206,6 @@
       ...pageButtons(page),
       button('下一页', () => goToPage(page + 1)),
       button('+10', () => goToPage(page + 10)),
-      button('顶部', () => scrollToEdge('top')),
-      button('底部', () => scrollToEdge('bottom')),
       jumpRow(page)
     );
   }
@@ -304,9 +347,48 @@
     return node;
   }
 
+  function ensureScrollControls() {
+    if (scrollControls) return;
+    scrollControls = document.createElement('div');
+    scrollControls.className = 'rrui-scroll-controls';
+    scrollControls.append(
+      scrollButton('↑', '回到顶部', () => scrollToEdge('top')),
+      scrollButton('↓', '回到底部', () => scrollToEdge('bottom'))
+    );
+    document.body.append(scrollControls);
+  }
+
+  function scrollButton(text, title, onClick) {
+    const node = button(text, onClick);
+    node.title = title;
+    node.setAttribute('aria-label', title);
+    return node;
+  }
+
   function scrollToEdge(edge) {
     const height = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
     window.scrollTo({ top: edge === 'top' ? 0 : height, behavior: 'smooth' });
+  }
+
+  function scheduleScrollControls() {
+    if (scrollScheduled) return;
+    scrollScheduled = true;
+    requestAnimationFrame(() => {
+      scrollScheduled = false;
+      updateScrollControls();
+    });
+  }
+
+  function updateScrollControls() {
+    if (!scrollControls) return;
+    const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const up = scrollControls.children[0];
+    const down = scrollControls.children[1];
+
+    scrollControls.hidden = maxScroll <= 8;
+    up.hidden = scrollTop <= 8;
+    down.hidden = scrollTop >= maxScroll - 8;
   }
 
   function scheduleRender() {
@@ -315,11 +397,15 @@
     requestAnimationFrame(() => {
       scheduled = false;
       render();
+      scheduleScrollControls();
     });
   }
 
   function observe() {
-    new MutationObserver(scheduleRender).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(() => {
+      scheduleRender();
+      scheduleScrollControls();
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
   function patchHistory() {
