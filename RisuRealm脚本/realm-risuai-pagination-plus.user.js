@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Pagination Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.0
+// @version      1.0.1
 // @license      MIT
 // @description  Add quick page jump controls to RisuRealm list pagination.
 // @match        https://realm.risuai.net/*
@@ -47,6 +47,13 @@
     .rrp-pager button:disabled {
       cursor: not-allowed;
       opacity: 0.45;
+    }
+
+    .rrp-pager .rrp-page-current:disabled {
+      background: #f43f5e;
+      border-color: #fb7185;
+      color: #fff;
+      opacity: 1;
     }
 
     .rrp-pager input {
@@ -101,13 +108,34 @@
       button('首页', () => goToPage(1), page <= 1),
       button('-10', () => goToPage(page - 10), page <= 1),
       button('上一页', () => goToPage(page - 1), page <= 1),
+      ...pageButtons(page),
+      button('下一页', () => goToPage(page + 1)),
+      button('+10', () => goToPage(page + 10)),
       label('第'),
       input(page),
       label('页'),
-      button('跳转', () => goToPage(Number(pager.querySelector('input').value))),
-      button('下一页', () => goToPage(page + 1)),
-      button('+10', () => goToPage(page + 10))
+      button('跳转', () => goToPage(Number(pager.querySelector('input').value)))
     );
+  }
+
+  function pageButtons(page) {
+    const nodes = [];
+    const start = Math.max(1, page - 2);
+    const end = page + 2;
+
+    if (start > 1) {
+      nodes.push(button('1', () => goToPage(1), page === 1));
+      if (start > 2) nodes.push(label('…'));
+    }
+
+    for (let n = start; n <= end; n += 1) {
+      const node = button(String(n), () => goToPage(n), n === page);
+      if (n === page) node.classList.add('rrp-page-current');
+      nodes.push(node);
+    }
+
+    nodes.push(label('…'));
+    return nodes;
   }
 
   function findNativePager() {
