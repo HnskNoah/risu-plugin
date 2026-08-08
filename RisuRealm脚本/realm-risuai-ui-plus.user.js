@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.0
+// @version      1.0.1
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
@@ -189,6 +189,7 @@
     if (!Number.isFinite(page)) return;
     const nextPage = Math.max(1, Math.floor(page));
     const url = new URL(location.href);
+    if (!url.searchParams.has('sort')) url.searchParams.set('sort', '');
     url.searchParams.set('page', String(nextPage));
     location.href = url.href;
   }
