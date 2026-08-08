@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.5
+// @version      1.4.6
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -687,9 +687,9 @@
 
   function downloadTypeFromUrl(url) {
     if (url.includes('/charx-v3/')) return 'charx';
-    if (url.includes('/png-v3/')) return 'normal';
-    if (url.includes('/preset-risu-v1/')) return 'preset';
-    if (url.includes('/module-v1/')) return 'module';
+    if (/\/(?:png|json)-v[23]\//.test(url)) return 'normal';
+    if (/\/preset-(?:risu-v1|st-chat)\//.test(url)) return 'preset';
+    if (/\/(?:module-v1|lorebook-v[23])\//.test(url)) return 'module';
     return '';
   }
 
@@ -1319,25 +1319,44 @@
 
     const failed = [];
     for (const item of items) {
-      const ok = await downloadItem(item);
-      if (!ok) failed.push(item.title || item.path);
+      const error = await downloadItem(item);
+      if (error) failed.push(`${item.title || item.path} - ${error}`);
     }
-    if (failed.length) alert(`以下项目未找到可用下载链接：\n${failed.slice(0, 10).join('\n')}${failed.length > 10 ? '\n...' : ''}`);
+    if (failed.length) alert(`以下项目下载失败：\n${failed.slice(0, 10).join('\n')}${failed.length > 10 ? '\n...' : ''}`);
   }
 
   async function downloadItem(item) {
+    let lastError = '没有可用下载格式';
     for (const candidate of downloadCandidates(item)) {
       try {
         const response = await fetch(candidate.url);
-        if (!response.ok) continue;
+        if (!response.ok) {
+          lastError = await downloadErrorMessage(response, candidate);
+          continue;
+        }
         const blob = await response.blob();
         triggerDownload(blob, candidate.name);
-        return true;
-      } catch (_) {
-        // Try next candidate.
+        return '';
+      } catch (error) {
+        lastError = error && error.message ? error.message : '网络错误';
       }
     }
-    return false;
+    return lastError;
+  }
+
+  async function downloadErrorMessage(response, candidate) {
+    let message = '';
+    try {
+      const body = await response.clone().json();
+      message = body.message || body.error || '';
+    } catch (_) {
+      try {
+        message = (await response.text()).slice(0, 120).trim();
+      } catch (_) {
+        message = '';
+      }
+    }
+    return `${candidate.format || 'download'} ${response.status}${message ? ` ${message}` : ''}`;
   }
 
   function downloadCandidates(item) {
@@ -1347,27 +1366,62 @@
     const title = safeFileName(item.title || id);
     const type = String(item.downloadType || item.type || typeFromPath(item.path)).toLowerCase();
     const candidates = [];
+    const addFormat = (format, ext) => {
+      candidates.push({ format, name: `${title}.${ext}`, url: `/api/v1/download/${format}/${id}` });
+    };
 
-    if (item.downloadUrl) candidates.push({ name: item.downloadName || `${title}.download`, url: item.downloadUrl });
-    if (type === 'charx') candidates.push({ name: `${title}.charx`, url: `/api/v1/download/charx-v3/${id}` });
-    if (type === 'normal') candidates.push({ name: `${title}.png`, url: `/api/v1/download/png-v3/${id}` });
-    if (type === 'preset') candidates.push({ name: `${title}.risupreset`, url: `/api/v1/download/preset-risu-v1/${id}` });
-    if (type === 'module' || type === 'lorebook') candidates.push({ name: `${title}.json`, url: `/api/v1/download/module-v1/${id}` });
-    if (type === 'character') {
-      candidates.push(
-        { name: `${title}.charx`, url: `/api/v1/download/charx-v3/${id}` },
-        { name: `${title}.png`, url: `/api/v1/download/png-v3/${id}` },
-      );
+    if (item.downloadUrl) {
+      candidates.push({
+        format: downloadFormatFromUrl(item.downloadUrl),
+        name: item.downloadName || downloadNameFromUrl(title, item.downloadUrl),
+        url: item.downloadUrl,
+      });
+    }
+    if (type === 'charx') addFormat('charx-v3', 'charx');
+    if (type === 'charx' || type === 'normal' || type === 'character') {
+      addFormat('png-v3', 'png');
+      addFormat('json-v3', 'json');
+      addFormat('json-v2', 'json');
+    }
+    if (type === 'preset') {
+      addFormat('preset-risu-v1', 'risupreset');
+      addFormat('preset-st-chat', 'json');
+    }
+    if (type === 'module' || type === 'lorebook') {
+      addFormat('module-v1', 'json');
+      addFormat('lorebook-v3', 'json');
+      addFormat('lorebook-v2', 'json');
     }
 
     const seen = new Set();
     return candidates.filter((candidate) => {
       const url = new URL(candidate.url, location.origin).href;
-      if (seen.has(url)) return false;
-      seen.add(url);
-      candidate.url = url;
+      const downloadUrl = withApiDownloadOptions(url);
+      if (seen.has(downloadUrl)) return false;
+      seen.add(downloadUrl);
+      candidate.url = downloadUrl;
       return true;
     });
+  }
+
+  function withApiDownloadOptions(url) {
+    const normalized = new URL(url, location.origin);
+    if (normalized.pathname.includes('/api/v1/download/')) normalized.searchParams.set('cors', 'true');
+    return normalized.href;
+  }
+
+  function downloadFormatFromUrl(url) {
+    const match = String(url || '').match(/\/api\/v1\/download\/([^/]+)\//);
+    return match ? match[1] : '';
+  }
+
+  function downloadNameFromUrl(title, url) {
+    const format = downloadFormatFromUrl(url);
+    if (format === 'charx-v3') return `${title}.charx`;
+    if (format.startsWith('png-')) return `${title}.png`;
+    if (format === 'preset-risu-v1') return `${title}.risupreset`;
+    if (format) return `${title}.json`;
+    return `${title}.download`;
   }
 
   function triggerDownload(blob, name) {
