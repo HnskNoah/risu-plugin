@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.3
+// @version      1.0.4
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
@@ -198,7 +198,7 @@
     const url = new URL(location.href);
     if (!url.searchParams.has('sort')) url.searchParams.set('sort', '');
     url.searchParams.set('page', String(nextPage));
-    normalizePagedSort(url);
+    normalizeListQuery(url);
     location.href = url.href;
   }
 
@@ -216,15 +216,25 @@
     const filterChanged = FILTER_PARAMS.some((key) => (current.searchParams.get(key) || '') !== (url.searchParams.get(key) || ''));
     if (filterChanged) url.searchParams.set('page', '1');
     if (url.searchParams.has('page') && !url.searchParams.has('sort')) url.searchParams.set('sort', '');
-    normalizePagedSort(url);
+    normalizeListQuery(url);
     return url.href;
   }
 
-  function normalizePagedSort(url) {
+  function normalizeListQuery(url) {
     const page = Number(url.searchParams.get('page') || 1);
     if ((url.searchParams.get('sort') || '') === 'recommended' && Number.isFinite(page) && page > 1) {
       url.searchParams.set('sort', '');
     }
+
+    const original = new URLSearchParams(url.search);
+    const ordered = new URLSearchParams();
+    ['sort', 'mode', 'page', 'nsfw'].forEach((key) => {
+      if (original.has(key)) ordered.set(key, original.get(key) || '');
+    });
+    original.forEach((value, key) => {
+      if (!['sort', 'mode', 'page', 'nsfw'].includes(key)) ordered.append(key, value);
+    });
+    url.search = ordered.toString();
   }
 
   function repairCurrentUrl() {
