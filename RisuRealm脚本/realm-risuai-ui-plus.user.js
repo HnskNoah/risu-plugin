@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.6
+// @version      1.0.7
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
@@ -116,11 +116,11 @@
 
     .rrui-scroll-controls button {
       align-items: center;
-      background: #f43f5e;
-      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: #e5e7eb;
+      border: 1px solid rgba(17, 24, 39, 0.14);
       border-radius: 999px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
-      color: #fff;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+      color: #374151;
       cursor: pointer;
       display: flex;
       font: 800 18px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
