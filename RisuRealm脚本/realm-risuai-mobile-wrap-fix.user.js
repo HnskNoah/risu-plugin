@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         RisuRealm Mobile Wrap Fix
+// @name         RisuRealm Mobile Wrap Fix (Deprecated)
 // @namespace    https://realm.risuai.net/
-// @version      1.0.3
+// @version      1.0.4
 // @license      MIT
-// @description  Prevent long RisuRealm text and links from overflowing the page width.
+// @description  Deprecated: use RisuRealm UI Plus instead.
 // @match        https://realm.risuai.net/*
 // @icon         https://realm.risuai.net/favicon.ico
 // @run-at       document-start

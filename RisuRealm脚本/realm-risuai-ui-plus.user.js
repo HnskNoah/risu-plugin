@@ -1,24 +1,47 @@
 // ==UserScript==
-// @name         RisuRealm Pagination Plus (Deprecated)
+// @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.2
+// @version      1.0.0
 // @license      MIT
-// @description  Deprecated: use RisuRealm UI Plus instead.
+// @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
 // @icon         https://realm.risuai.net/favicon.ico
-// @run-at       document-idle
+// @run-at       document-start
 // @grant        none
 // ==/UserScript==
 
 (function () {
   'use strict';
 
+  window.__RisuRealmUiPlus = true;
+
   const css = `
-    .rrp-native-hidden {
-      display: none !important;
+    html,
+    body {
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+      overflow-x: clip !important;
+    }
+
+    body :where(p, li, a, pre, code),
+    body :where(article, section, div, span):not(:has(img, video, canvas, svg)) {
+      overflow-wrap: anywhere !important;
+      word-break: break-word;
+    }
+
+    body :where(pre, code) {
+      white-space: pre-wrap !important;
     }
 
     .rrp-pager {
+      display: none !important;
+    }
+
+    .rrui-native-hidden {
+      display: none !important;
+    }
+
+    .rrui-pager {
       align-items: center;
       display: flex;
       flex-wrap: wrap;
@@ -29,8 +52,8 @@
       padding: 0 12px;
     }
 
-    .rrp-pager button,
-    .rrp-pager input {
+    .rrui-pager button,
+    .rrui-pager input {
       background: #e5e7eb;
       border: 1px solid rgba(17, 24, 39, 0.12);
       border-radius: 999px;
@@ -39,30 +62,30 @@
       height: 36px;
     }
 
-    .rrp-pager button {
+    .rrui-pager button {
       cursor: pointer;
       padding: 0 13px;
     }
 
-    .rrp-pager button:disabled {
+    .rrui-pager button:disabled {
       cursor: not-allowed;
       opacity: 0.45;
     }
 
-    .rrp-pager .rrp-page-current:disabled {
+    .rrui-pager .rrui-page-current:disabled {
       background: #f43f5e;
       border-color: #fb7185;
       color: #fff;
       opacity: 1;
     }
 
-    .rrp-pager input {
+    .rrui-pager input {
       padding: 0 10px;
       text-align: center;
       width: 86px;
     }
 
-    .rrp-page-label {
+    .rrui-page-label {
       color: rgba(17, 24, 39, 0.72);
       font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -72,28 +95,38 @@
   let scheduled = false;
 
   addStyle(css);
-  render();
-  observe();
-  patchHistory();
-  window.addEventListener('popstate', scheduleRender);
+  ready(() => {
+    render();
+    observe();
+    patchHistory();
+    window.addEventListener('popstate', scheduleRender);
+  });
+
+  function ready(callback) {
+    if (document.body) {
+      callback();
+      return;
+    }
+    document.addEventListener('DOMContentLoaded', callback, { once: true });
+  }
 
   function render() {
     const nativePager = findNativePager();
     if (!nativePager || !isListPage()) {
       if (pager) pager.remove();
       pager = null;
-      document.querySelectorAll('.rrp-native-hidden').forEach((node) => node.classList.remove('rrp-native-hidden'));
+      document.querySelectorAll('.rrui-native-hidden').forEach((node) => node.classList.remove('rrui-native-hidden'));
       return;
     }
 
-    nativePager.classList.add('rrp-native-hidden');
+    nativePager.classList.add('rrui-native-hidden');
     if (!pager) {
       pager = document.createElement('form');
-      pager.className = 'rrp-pager';
+      pager.className = 'rrui-pager';
       pager.addEventListener('submit', (event) => {
         event.preventDefault();
-        const input = pager.querySelector('input');
-        goToPage(Number(input && input.value));
+        const inputNode = pager.querySelector('input');
+        goToPage(Number(inputNode && inputNode.value));
       });
       nativePager.insertAdjacentElement('afterend', pager);
     } else if (pager.previousElementSibling !== nativePager) {
@@ -101,8 +134,8 @@
     }
 
     const page = currentPage();
-    if (pager.dataset.rrpPage === String(page)) return;
-    pager.dataset.rrpPage = String(page);
+    if (pager.dataset.rruiPage === String(page)) return;
+    pager.dataset.rruiPage = String(page);
     pager.innerHTML = '';
     pager.append(
       button('首页', () => goToPage(1), page <= 1),
@@ -125,16 +158,16 @@
 
     if (start > 1) {
       nodes.push(button('1', () => goToPage(1), page === 1));
-      if (start > 2) nodes.push(label('…'));
+      if (start > 2) nodes.push(label('...'));
     }
 
     for (let n = start; n <= end; n += 1) {
       const node = button(String(n), () => goToPage(n), n === page);
-      if (n === page) node.classList.add('rrp-page-current');
+      if (n === page) node.classList.add('rrui-page-current');
       nodes.push(node);
     }
 
-    nodes.push(label('…'));
+    nodes.push(label('...'));
     return nodes;
   }
 
@@ -182,7 +215,7 @@
 
   function label(text) {
     const node = document.createElement('span');
-    node.className = 'rrp-page-label';
+    node.className = 'rrui-page-label';
     node.textContent = text;
     return node;
   }
