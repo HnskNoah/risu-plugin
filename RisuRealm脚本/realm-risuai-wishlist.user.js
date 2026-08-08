@@ -1,9 +1,13 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.7
+// @version      1.4.8
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
+// @description:en Add heart wishlist buttons to RisuRealm cards and detail pages, with local save, filters, import/export, and batch actions.
+// @description:zh-CN 给 RisuRealm 卡片和详情页添加心愿单按钮，并支持本地保存、筛选、导入导出和批量操作。
+// @description:ko RisuRealm 카드와 상세 페이지에 위시리스트 버튼을 추가하고, 로컬 저장, 필터, 가져오기/내보내기, 일괄 작업을 지원합니다.
+// @description:ja RisuRealm のカードと詳細ページにウィッシュリストボタンを追加し、ローカル保存、絞り込み、インポート/エクスポート、一括操作に対応します。
 // @match        https://realm.risuai.net/*
 // @icon         https://realm.risuai.net/favicon.ico
 // @run-at       document-idle

@@ -1,9 +1,13 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.8
+// @version      1.0.9
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
+// @description:en Fix long text overflow and add quick page jump controls to RisuRealm.
+// @description:zh-CN 修复 RisuRealm 长文本溢出，并增强分页跳转与右侧悬浮滚动按钮。
+// @description:ko RisuRealm의 긴 텍스트 넘침을 수정하고 페이지 이동 및 오른쪽 고정 스크롤 버튼을 추가합니다.
+// @description:ja RisuRealm の長いテキストのはみ出しを修正し、ページ移動と右側固定スクロールボタンを追加します。
 // @match        https://realm.risuai.net/*
 // @icon         https://realm.risuai.net/favicon.ico
 // @run-at       document-start
