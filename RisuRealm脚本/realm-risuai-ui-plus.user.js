@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm UI Plus
 // @namespace    https://realm.risuai.net/
-// @version      1.0.7
+// @version      1.0.8
 // @license      MIT
 // @description  Fix long text overflow and add quick page jump controls to RisuRealm.
 // @match        https://realm.risuai.net/*
@@ -84,9 +84,17 @@
     }
 
     .rrui-pager input {
+      max-width: 120px;
+      min-width: 42px;
       padding: 0 10px;
       text-align: center;
-      width: 86px;
+      width: auto;
+    }
+
+    .rrui-pager input::-webkit-inner-spin-button,
+    .rrui-pager input::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
 
     .rrui-page-label {
@@ -337,7 +345,14 @@
     node.inputMode = 'numeric';
     node.value = String(page);
     node.setAttribute('aria-label', '页码');
+    resizePageInput(node);
+    node.addEventListener('input', () => resizePageInput(node));
     return node;
+  }
+
+  function resizePageInput(node) {
+    const digits = Math.max(1, String(node.value || '').length);
+    node.style.width = `${Math.min(120, Math.max(42, 24 + digits * 9))}px`;
   }
 
   function label(text) {

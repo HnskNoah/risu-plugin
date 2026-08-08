@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Pagination Plus (Deprecated)
 // @namespace    https://realm.risuai.net/
-// @version      1.0.9
+// @version      1.0.10
 // @license      MIT
 // @description  Deprecated: use RisuRealm UI Plus instead.
 // @match        https://realm.risuai.net/*
@@ -61,9 +61,17 @@
     }
 
     .rrp-pager input {
+      max-width: 120px;
+      min-width: 42px;
       padding: 0 10px;
       text-align: center;
-      width: 86px;
+      width: auto;
+    }
+
+    .rrp-pager input::-webkit-inner-spin-button,
+    .rrp-pager input::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
 
     .rrp-page-label {
@@ -304,7 +312,14 @@
     node.inputMode = 'numeric';
     node.value = String(page);
     node.setAttribute('aria-label', '页码');
+    resizePageInput(node);
+    node.addEventListener('input', () => resizePageInput(node));
     return node;
+  }
+
+  function resizePageInput(node) {
+    const digits = Math.max(1, String(node.value || '').length);
+    node.style.width = `${Math.min(120, Math.max(42, 24 + digits * 9))}px`;
   }
 
   function label(text) {
