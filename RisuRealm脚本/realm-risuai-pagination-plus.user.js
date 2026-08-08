@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Pagination Plus (Deprecated)
 // @namespace    https://realm.risuai.net/
-// @version      1.0.6
+// @version      1.0.7
 // @license      MIT
 // @description  Deprecated: use RisuRealm UI Plus instead.
 // @match        https://realm.risuai.net/*
@@ -34,13 +34,17 @@
       background: #e5e7eb;
       border: 1px solid rgba(17, 24, 39, 0.12);
       border-radius: 999px;
+      box-sizing: border-box;
       color: #1f2937;
+      flex: 0 0 auto;
       font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       height: 36px;
+      white-space: nowrap;
     }
 
     .rrp-pager button {
       cursor: pointer;
+      min-width: 36px;
       padding: 0 13px;
     }
 
@@ -65,6 +69,16 @@
     .rrp-page-label {
       color: rgba(17, 24, 39, 0.72);
       font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .rrp-jump-row {
+      align-items: center;
+      display: flex;
+      flex: 0 0 100%;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 2px;
     }
   `;
 
@@ -114,10 +128,9 @@
       ...pageButtons(page),
       button('下一页', () => goToPage(page + 1)),
       button('+10', () => goToPage(page + 10)),
-      label('第'),
-      input(page),
-      label('页'),
-      button('跳转', () => goToPage(Number(pager.querySelector('input').value)))
+      button('顶部', () => scrollToEdge('top')),
+      button('底部', () => scrollToEdge('bottom')),
+      jumpRow(page)
     );
   }
 
@@ -127,8 +140,7 @@
     const end = page + 2;
 
     if (start > 1) {
-      nodes.push(button('1', () => goToPage(1), page === 1));
-      if (start > 2) nodes.push(label('…'));
+      nodes.push(label('…'));
     }
 
     for (let n = start; n <= end; n += 1) {
@@ -139,6 +151,18 @@
 
     nodes.push(label('…'));
     return nodes;
+  }
+
+  function jumpRow(page) {
+    const node = document.createElement('div');
+    node.className = 'rrp-jump-row';
+    node.append(
+      label('第'),
+      input(page),
+      label('页'),
+      button('跳转', () => goToPage(Number(node.querySelector('input').value)))
+    );
+    return node;
   }
 
   function findNativePager() {
@@ -245,6 +269,11 @@
     node.className = 'rrp-page-label';
     node.textContent = text;
     return node;
+  }
+
+  function scrollToEdge(edge) {
+    const height = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+    window.scrollTo({ top: edge === 'top' ? 0 : height, behavior: 'smooth' });
   }
 
   function scheduleRender() {
