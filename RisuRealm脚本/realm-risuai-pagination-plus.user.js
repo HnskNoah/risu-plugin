@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Pagination Plus (Deprecated)
 // @namespace    https://realm.risuai.net/
-// @version      1.0.4
+// @version      1.0.5
 // @license      MIT
 // @description  Deprecated: use RisuRealm UI Plus instead.
 // @match        https://realm.risuai.net/*
@@ -73,6 +73,7 @@
   const FILTER_PARAMS = ['sort', 'mode', 'nsfw'];
 
   addStyle(css);
+  repairCurrentUrl();
   render();
   observe();
   patchHistory();
@@ -164,6 +165,7 @@
     const url = new URL(location.href);
     if (!url.searchParams.has('sort')) url.searchParams.set('sort', '');
     url.searchParams.set('page', String(nextPage));
+    normalizePagedSort(url);
     location.href = url.href;
   }
 
@@ -181,7 +183,20 @@
     const filterChanged = FILTER_PARAMS.some((key) => (current.searchParams.get(key) || '') !== (url.searchParams.get(key) || ''));
     if (filterChanged) url.searchParams.set('page', '1');
     if (url.searchParams.has('page') && !url.searchParams.has('sort')) url.searchParams.set('sort', '');
+    normalizePagedSort(url);
     return url.href;
+  }
+
+  function normalizePagedSort(url) {
+    const page = Number(url.searchParams.get('page') || 1);
+    if ((url.searchParams.get('sort') || '') === 'recommended' && Number.isFinite(page) && page > 1) {
+      url.searchParams.set('sort', '');
+    }
+  }
+
+  function repairCurrentUrl() {
+    const nextUrl = normalizeListUrl(location.href);
+    if (nextUrl !== location.href) location.replace(nextUrl);
   }
 
   function normalizeLinkNavigation(event) {
