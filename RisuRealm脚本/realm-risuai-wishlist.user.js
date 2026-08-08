@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RisuRealm Wishlist
 // @namespace    https://realm.risuai.net/
-// @version      1.4.6
+// @version      1.4.7
 // @license      MIT
 // @description  Add heart wishlist buttons to RisuRealm cards and keep a local importable/exportable wishlist.
 // @match        https://realm.risuai.net/*
@@ -16,6 +16,7 @@
   'use strict';
 
   const STORAGE_KEY = 'rrw:wishlist:v1';
+  const NON_COMMERCIAL_KEY = 'rrw:noncommercial:v1';
   const CARD_SELECTOR = [
     'a[href^="/character/"]',
     'a[href^="/preset/"]',
@@ -156,7 +157,8 @@
       background: rgba(255, 255, 255, 0.18);
     }
 
-    .rrw-toolbar button[aria-pressed="true"] {
+    .rrw-toolbar button[aria-pressed="true"],
+    .rrw-panel button[aria-pressed="true"] {
       background: #f43f5e;
       border-color: #fb7185;
     }
@@ -435,6 +437,7 @@
 
   let state = normalizeStore(readStore());
   let filterEnabled = false;
+  let nonCommercialDownload = readBool(NON_COMMERCIAL_KEY);
   let panelFilter = 'character';
   let tagFilterMode = 'any';
   let tagExpanded = false;
@@ -523,6 +526,28 @@
         localStorage.setItem(STORAGE_KEY, raw);
       } catch (error) {
         console.error('[RisuRealm Wishlist] Failed to save wishlist', error);
+      }
+    }
+  }
+
+  function readBool(key) {
+    try {
+      const value = typeof GM_getValue === 'function' ? GM_getValue(key, false) : localStorage.getItem(key);
+      return value === true || value === 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function writeBool(key, value) {
+    try {
+      if (typeof GM_setValue === 'function') GM_setValue(key, Boolean(value));
+      else localStorage.setItem(key, String(Boolean(value)));
+    } catch (_) {
+      try {
+        localStorage.setItem(key, String(Boolean(value)));
+      } catch (error) {
+        console.error('[RisuRealm Wishlist] Failed to save setting', error);
       }
     }
   }
@@ -1020,6 +1045,17 @@
     downloadSelectedButton.textContent = '直接下载所选';
     downloadSelectedButton.addEventListener('click', downloadSelectedItems);
 
+    const nonCommercialButton = document.createElement('button');
+    nonCommercialButton.type = 'button';
+    nonCommercialButton.textContent = `非商业下载: ${nonCommercialDownload ? '开' : '关'}`;
+    nonCommercialButton.title = '开启后 API 下载会附加 non_commercial=true';
+    nonCommercialButton.setAttribute('aria-pressed', String(nonCommercialDownload));
+    nonCommercialButton.addEventListener('click', () => {
+      nonCommercialDownload = !nonCommercialDownload;
+      writeBool(NON_COMMERCIAL_KEY, nonCommercialDownload);
+      renderPanel();
+    });
+
     const importButton = document.createElement('button');
     importButton.type = 'button';
     importButton.textContent = '导入';
@@ -1030,7 +1066,7 @@
     closeButton.textContent = '关闭';
     closeButton.addEventListener('click', closePanel);
 
-    actions.append(importButton, exportSelectedButton, downloadSelectedButton, clearButton, closeButton);
+    actions.append(importButton, exportSelectedButton, nonCommercialButton, downloadSelectedButton, clearButton, closeButton);
     header.append(title, actions);
     panel.append(header);
 
@@ -1406,7 +1442,10 @@
 
   function withApiDownloadOptions(url) {
     const normalized = new URL(url, location.origin);
-    if (normalized.pathname.includes('/api/v1/download/')) normalized.searchParams.set('cors', 'true');
+    if (normalized.pathname.includes('/api/v1/download/')) {
+      normalized.searchParams.set('cors', 'true');
+      if (nonCommercialDownload) normalized.searchParams.set('non_commercial', 'true');
+    }
     return normalized.href;
   }
 
